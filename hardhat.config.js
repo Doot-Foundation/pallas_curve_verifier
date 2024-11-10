@@ -22,8 +22,8 @@ module.exports = {
   networks: {
     hardhat: {
       allowUnlimitedContractSize: true,
-      blockGasLimit: 0x1fffffffffffff, // Practically unlimited
-      gas: 0x1fffffffffffff,
+      blockGasLimit: 100000000000, // Practically unlimited
+      gas: 100000000000,
     },
   },
   mocha: {
