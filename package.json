@@ -11,5 +11,10 @@
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^3.0.0",
     "hardhat": "^2.22.15"
+  },
+  "dependencies": {
+    "hardhat-deploy": "^0.14.0",
+    "mina-signer": "^3.0.7",
+    "o1js": "^2.0.0"
   }
 }
