@@ -9,9 +9,7 @@ import "./PallasConstants.sol";
  */
 contract PoseidonT3 is PallasConstants {
     // MDS matrix from o1js constants
-    /**
-     * @dev Returns MDS matrix values by index
-     */
+
     /**
      * @dev Returns MDS matrix values by index
      */
@@ -76,9 +74,7 @@ contract PoseidonT3 is PallasConstants {
                 return
                     0x257E1A13DFC21619B3AA7E23CE847DA7A3C23DE19EA2F89A10575B18F4615456;
         }
-        // Add more constants from o1js...
-
-        return 0; // Default return for testing
+        return 0;
     }
 
     /**
@@ -140,24 +136,6 @@ contract PoseidonT3 is PallasConstants {
         return currentState;
     }
 
-    // /**
-    //  * @dev Matrix multiplication with MDS matrix
-    //  */
-    // function mdsMultiply(
-    //     uint256[3] memory state
-    // ) internal pure returns (uint256[3] memory result) {
-    //     for (uint256 i = 0; i < 3; i++) {
-    //         result[i] = 0;
-    //         for (uint256 j = 0; j < 3; j++) {
-    //             result[i] = addmod(
-    //                 result[i],
-    //                 mulmod(getMdsValue(i, j), state[j], FIELD_MODULUS),
-    //                 FIELD_MODULUS
-    //             );
-    //         }
-    //     }
-    // }
-
     /**
      * @dev Initial state array [0, 0, 0]
      */
@@ -183,38 +161,6 @@ contract PoseidonT3 is PallasConstants {
         }
         return result % FIELD_MODULUS;
     }
-
-    // /**
-    //  * @dev Power7 function for Poseidon S-box
-    //  */
-    // function power7(uint256 x) internal pure returns (uint256) {
-    //     // Calculate x^2
-    //     uint256 x2 = mulmod(x, x, FIELD_MODULUS);
-    //     // Calculate x^3
-    //     uint256 x3 = mulmod(x2, x, FIELD_MODULUS);
-    //     // Calculate x^6 (by squaring x^3)
-    //     uint256 x6 = mulmod(x3, x3, FIELD_MODULUS);
-    //     // Final result: x^7 = x^6 * x
-    //     return mulmod(x6, x, FIELD_MODULUS);
-    // }
-
-    // /**
-    //  * @dev The Poseidon permutation function
-    //  */
-    // function poseidonPermutation(
-    //     uint256[3] memory state
-    // ) internal pure returns (uint256[3] memory) {
-    //     for (uint256 r = 0; r < POSEIDON_FULL_ROUNDS; r++) {
-    //         // Apply S-box
-    //         for (uint256 i = 0; i < POSEIDON_STATE_SIZE; i++) {
-    //             state[i] = power7(state[i]);
-    //         }
-
-    //         // MDS multiplication
-    //         state = mdsMultiply(state);
-    //     }
-    //     return state;
-    // }
 
     /**
      * @dev Update state with input

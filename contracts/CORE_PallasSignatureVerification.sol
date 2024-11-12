@@ -17,6 +17,20 @@ contract PallasSignatureVerifier is
     PallasCurve,
     PoseidonT3
 {
+    uint256 public verificationCounter;
+    mapping(uint256 => VerificationState) public signatureVerify;
+
+    struct VerificationState {
+        uint256 atStep;
+        uint256[] messageFields;
+        uint256[] hashInput;
+        uint256 hash;
+        Point hP;
+        Point negHp;
+        Point sG;
+        Point finalR;
+    }
+
     /**
      * @dev Check if a point is a valid Pallas curve point
      */
@@ -35,174 +49,201 @@ contract PallasSignatureVerifier is
         return lhs == rhs;
     }
 
-    // /**
-    //  * @dev Verifies a signature against a message and public key. Field[]
-    //  */
-    // function verifyFields(
-    //     Signature memory signature,
-    //     Point memory publicKey,
-    //     uint256[] memory message
-    // ) public pure returns (bool) {
-    //     require(signature.s < SCALAR_MODULUS, "Invalid s value");
-    //     require(signature.r < FIELD_MODULUS, "Invalid r value");
-    //     require(isOnCurve(publicKey), "Public key not on curve");
-
-    //     // Prepare hash input
-    //     uint256[] memory hashInput = new uint256[](message.length + 3);
-    //     for (uint i = 0; i < message.length; i++) {
-    //         hashInput[i] = message[i];
-    //     }
-    //     hashInput[message.length] = publicKey.x;
-    //     hashInput[message.length + 1] = publicKey.y;
-    //     hashInput[message.length + 2] = signature.r;
-
-    //     // Compute hash with testnet prefix
-    //     uint256 h = hashWithPrefix(SIGNATURE_PREFIX, hashInput);
-
-    //     // Compute R = s⋅G - h⋅P
-    //     Point memory hP = scalarMul(publicKey, h);
-    //     Point memory negHp = Point(hP.x, FIELD_MODULUS - hP.y); // Negate y coordinate
-
-    //     Point memory sG = scalarMul(Point(G_X, G_Y), signature.s);
-    //     Point memory r = addPoints(sG, negHp);
-
-    //     // Verify r.x equals signature.r and r.y is even
-    //     return r.x == signature.r && r.y % 2 == 0;
-    // }
-
-    /**
-    //  * @dev Convenience function to verify a signature for a single field element message.
-    //  * A Schnorr over the Pasta Curves.
-    //  */
-    // function verifyField(
-    //     Signature memory signature,
-    //     Point memory publicKey,
-    //     uint256 message
-    // ) public returns (bool) {
-    //     uint256[] memory messageArray = new uint256[](1);
-    //     messageArray[0] = message;
-    //     return verifySignature(signature, publicKey, messageArray);
-    // }
-
-    // function verifyMessage(
-    //     Signature calldata signature,
-    //     Point calldata publicKey,
-    //     string calldata message
-    // ) public returns (bool) {
-    //     console.log("Starting verification...");
-    //     require(signature.s < SCALAR_MODULUS, "Invalid s value");
-    //     require(signature.r < FIELD_MODULUS, "Invalid r value");
-
-    //     console.log("Converting message to fields...");
-    //     uint256[] memory messageFields = stringToFields(message);
-    //     console.log("Message fields length:", messageFields.length);
-
-    //     // Log first verification step
-    //     console.log("Starting signature verification...");
-    //     return verifySignature(signature, publicKey, messageFields);
-    // }
-
-    // function verifySignature(
-    //     Signature memory signature,
-    //     Point memory publicKey,
-    //     uint256[] memory message
-    // ) public returns (bool) {
-    //     console.log("Preparing hash input...");
-    //     // Hash preparation
-    //     uint256[] memory hashInput = new uint256[](message.length + 3);
-    //     for (uint i = 0; i < message.length; i++) {
-    //         hashInput[i] = message[i];
-    //     }
-    //     hashInput[message.length] = publicKey.x;
-    //     hashInput[message.length + 1] = publicKey.y;
-    //     hashInput[message.length + 2] = signature.r;
-
-    //     console.log("Computing hash...");
-    //     uint256 h = hashWithPrefix(SIGNATURE_PREFIX, hashInput);
-    //     console.log("Hash computed:", h);
-
-    //     console.log("Computing scalar multiplication hP...");
-    //     Point memory hP = scalarMul(publicKey, h);
-    //     console.log("hP computed. x:", hP.x, "y:", hP.y);
-
-    //     Point memory negHp = Point(hP.x, FIELD_MODULUS - hP.y);
-    //     console.log("Computing scalar multiplication sG...");
-    //     Point memory sG = scalarMul(Point(G_X, G_Y), signature.s);
-    //     console.log("sG computed. x:", sG.x, "y:", sG.y);
-
-    //     console.log("Computing final addition...");
-    //     Point memory r = addPoints(sG, negHp);
-    //     console.log("Final point computed. x:", r.x, "y:", r.y);
-
-    //     return r.x == signature.r && r.y % 2 == 0;
-    // }
-
-    struct VerificationState {
-        uint256[] messageFields;
-        uint256[] hashInput;
-        uint256 hash;
-        Point hP;
-        Point negHp;
-        Point sG;
-        Point finalR;
+    function clearArrays(uint256 verificationId) internal {
+        delete signatureVerify[verificationId].messageFields;
+        delete signatureVerify[verificationId].hashInput;
     }
 
     function step1_prepareMessage(
         string calldata message
-    ) public pure returns (uint256[] memory) {
-        return stringToFields(message);
+    ) public returns (uint256[] memory) {
+        verificationCounter++;
+        uint256 currentId = verificationCounter;
+
+        // Clear any existing arrays
+        clearArrays(currentId);
+
+        bytes memory messageBytes = bytes(message);
+        uint256[] memory fields = new uint256[](
+            (messageBytes.length + 31) / 32
+        );
+
+        for (uint i = 0; i < fields.length; i++) {
+            uint256 field = 0;
+            for (
+                uint j = 0;
+                j < 32 && (i * 32 + j) < messageBytes.length;
+                j++
+            ) {
+                field |= uint256(uint8(messageBytes[i * 32 + j])) << (j * 8);
+            }
+            fields[i] = field % FIELD_MODULUS;
+        }
+
+        // Create new dynamic array in storage
+        signatureVerify[currentId].messageFields = new uint256[](fields.length);
+        for (uint i = 0; i < fields.length; i++) {
+            signatureVerify[currentId].messageFields[i] = fields[i];
+        }
+
+        signatureVerify[currentId].atStep = 1;
+
+        console.log("Message converted to fields:", fields[0]);
+        console.log("Verification ID:", currentId);
+        return fields;
     }
 
     function step2_prepareHashInput(
-        uint256[] calldata messageFields,
+        uint256 verificationId,
         Point calldata publicKey,
         uint256 r
-    ) public pure returns (uint256[] memory) {
-        uint256[] memory result = new uint256[](messageFields.length + 3);
+    ) public returns (uint256[] memory) {
+        require(
+            signatureVerify[verificationId].atStep == 1,
+            "Must complete step 1 first"
+        );
+
+        uint256[] memory messageFields = signatureVerify[verificationId]
+            .messageFields;
+        require(messageFields.length > 0, "No message fields found");
+
+        uint256[] memory hashInput = new uint256[](messageFields.length + 3);
+
         for (uint i = 0; i < messageFields.length; i++) {
-            result[i] = messageFields[i];
+            hashInput[i] = messageFields[i];
         }
-        result[messageFields.length] = publicKey.x;
-        result[messageFields.length + 1] = publicKey.y;
-        result[messageFields.length + 2] = r;
-        return result;
+
+        hashInput[messageFields.length] = publicKey.x;
+        hashInput[messageFields.length + 1] = publicKey.y;
+        hashInput[messageFields.length + 2] = r;
+
+        // Store in state with proper array handling
+        signatureVerify[verificationId].hashInput = new uint256[](
+            hashInput.length
+        );
+        for (uint i = 0; i < hashInput.length; i++) {
+            signatureVerify[verificationId].hashInput[i] = hashInput[i];
+        }
+
+        signatureVerify[verificationId].atStep = 2;
+
+        console.log("Hash input prepared. Length:", hashInput.length);
+        return hashInput;
     }
 
     function step3_computeHash(
-        uint256[] calldata hashInput
-    ) public pure returns (uint256) {
-        return hashWithPrefix(SIGNATURE_PREFIX, hashInput);
+        uint256 verificationId
+    ) public returns (uint256) {
+        require(
+            signatureVerify[verificationId].atStep == 2,
+            "Must complete step 2 first"
+        );
+        require(
+            signatureVerify[verificationId].hashInput.length > 0,
+            "No hash input found"
+        );
+
+        uint256[] memory hashInput = signatureVerify[verificationId].hashInput;
+        uint256 hash = hashWithPrefix(SIGNATURE_PREFIX, hashInput);
+
+        signatureVerify[verificationId].hash = hash;
+        signatureVerify[verificationId].atStep = 3;
+
+        // Clear arrays we don't need anymore
+        delete signatureVerify[verificationId].messageFields;
+        delete signatureVerify[verificationId].hashInput;
+
+        console.log("Hash computed:", hash);
+        return hash;
     }
 
     function step4_computeHP(
-        Point calldata publicKey,
-        uint256 hash
-    ) public pure returns (Point memory) {
-        return scalarMul(publicKey, hash);
+        uint256 verificationId,
+        Point calldata publicKey
+    ) public returns (Point memory) {
+        require(
+            signatureVerify[verificationId].atStep == 3,
+            "Must complete step 3 first"
+        );
+
+        uint256 hash = signatureVerify[verificationId].hash;
+        Point memory result = scalarMul(publicKey, hash);
+
+        signatureVerify[verificationId].hP = result;
+        signatureVerify[verificationId].atStep = 4;
+
+        console.log("hP computed - x:", result.x, "y:", result.y);
+        return result;
     }
 
     function step5_negatePoint(
-        Point calldata p
-    ) public pure returns (Point memory) {
-        return Point(p.x, FIELD_MODULUS - p.y);
+        uint256 verificationId
+    ) public returns (Point memory) {
+        require(
+            signatureVerify[verificationId].atStep == 4,
+            "Must complete step 4 first"
+        );
+
+        Point memory hP = signatureVerify[verificationId].hP;
+        Point memory negHp = Point(hP.x, FIELD_MODULUS - hP.y);
+
+        signatureVerify[verificationId].negHp = negHp;
+        signatureVerify[verificationId].atStep = 5;
+
+        return negHp;
     }
 
-    function step6_computeSG(uint256 s) public pure returns (Point memory) {
-        return scalarMul(Point(G_X, G_Y), s);
+    function step6_computeSG(
+        uint256 verificationId,
+        uint256 s
+    ) public returns (Point memory) {
+        require(
+            signatureVerify[verificationId].atStep == 5,
+            "Must complete step 5 first"
+        );
+
+        Point memory G = Point(G_X, G_Y);
+        Point memory sG = scalarMul(G, s);
+
+        signatureVerify[verificationId].sG = sG;
+        signatureVerify[verificationId].atStep = 6;
+
+        console.log("sG computed - x:", sG.x, "y:", sG.y);
+        return sG;
     }
 
     function step7_finalAddition(
-        Point calldata sG,
-        Point calldata negHp
-    ) public pure returns (Point memory) {
-        return addPoints(sG, negHp);
+        uint256 verificationId
+    ) public returns (Point memory) {
+        require(
+            signatureVerify[verificationId].atStep == 6,
+            "Must complete step 6 first"
+        );
+
+        Point memory sG = signatureVerify[verificationId].sG;
+        Point memory negHp = signatureVerify[verificationId].negHp;
+
+        Point memory result = addPoints(sG, negHp);
+
+        signatureVerify[verificationId].finalR = result;
+        signatureVerify[verificationId].atStep = 7;
+
+        console.log("Final addition - x:", result.x, "y:", result.y);
+        return result;
     }
 
     function step8_verify(
-        Point calldata r,
+        uint256 verificationId,
         uint256 expectedR
-    ) public pure returns (bool) {
-        console.log("Contract verification:");
+    ) public view returns (bool) {
+        require(
+            signatureVerify[verificationId].atStep == 7,
+            "Must complete step 7 first"
+        );
+
+        Point memory r = signatureVerify[verificationId].finalR;
+
+        console.log("Verifying...");
         console.log("Computed x:", r.x);
         console.log("Expected x:", expectedR);
         console.log("y value:", r.y);
@@ -215,5 +256,40 @@ contract PallasSignatureVerifier is
         console.log("y is even:", yIsEven);
 
         return xMatches && yIsEven;
+    }
+
+    // Helper function to clean up storage after verification
+    function cleanupVerification(uint256 verificationId) public {
+        delete signatureVerify[verificationId];
+    }
+
+    // Helper function to get current state
+    function getVerificationState(
+        uint256 verificationId
+    )
+        public
+        view
+        returns (
+            uint256 atStep,
+            uint256[] memory messageFields,
+            uint256[] memory hashInput,
+            uint256 hash,
+            Point memory hP,
+            Point memory negHp,
+            Point memory sG,
+            Point memory finalR
+        )
+    {
+        VerificationState storage state = signatureVerify[verificationId];
+        return (
+            state.atStep,
+            state.messageFields,
+            state.hashInput,
+            state.hash,
+            state.hP,
+            state.negHp,
+            state.sG,
+            state.finalR
+        );
     }
 }
