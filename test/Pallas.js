@@ -1,4 +1,4 @@
-const { PrivateKey, Poseidon, Group, Field } = require("o1js");
+const { PrivateKey, Poseidon, Group, Field, CircuitString } = require("o1js");
 const { Client } = require("mina-signer");
 const {
   loadFixture,
@@ -46,125 +46,180 @@ describe("Pallas Curve Verifier", function () {
     });
   });
 
-  describe("Signature Verification", function () {
-    it("Should verify if a Signature over a string is valid", async function () {
+  describe("Hash Verification", function () {
+    it("Should match o1js hash computation exactly", async function () {
       const { pallas } = await loadFixture(deployFixture);
 
+      // o1js computation
+      const prefix = "CodaSignature*******";
+      const message = "test"; // Using a simple test message
+
+      // O1js side
+      const messageCircuitString = CircuitString.fromString("test");
+      const messageField = messageCircuitString.hash();
+      console.log("\nO1js computation:");
+      console.log("Message as field:", messageField.toString());
+      const o1jsPrefix = CircuitString.fromString(prefix).hash();
+      console.log("Prefix as field:", o1jsPrefix.toString());
+
+      const o1jsHash = Poseidon.hashWithPrefix(prefix, [messageField]);
+      console.log("o1js final hash:", o1jsHash.toString());
+
+      // Solidity side
+      console.log("\nSolidity computation:");
+      const step1 = await pallas.step1_prepareMessage(message);
+      const verificationId = await pallas.verificationCounter();
+
+      // Get message field
+      const state = await pallas.getVerificationState(verificationId);
+      console.log("Message as field:", state.messageFields[0].toString());
+
+      // Get intermediate values
+      const point = { x: BigInt(0), y: BigInt(0) };
+      await pallas.step2_prepareHashInput(verificationId, point, BigInt(0));
+
+      // Get hash input array
+      const state2 = await pallas.getVerificationState(verificationId);
+      console.log(
+        "Hash input array:",
+        state2.hashInput.map((x) => x.toString())
+      );
+
+      await pallas.step3_computeHash(verificationId);
+      // console.log("Solidity final hash:", hashResult);
+      const updatedState = await pallas.getVerificationState(verificationId);
+      console.log(updatedState.hash);
+
+      expect(updatedState.hash).to.equal(o1jsHash.toString());
+    });
+
+    it("Should match o1js hash with single field element", async function () {
+      const { pallas } = await loadFixture(deployFixture);
+
+      const testField = Field(123);
+      const prefix = "CodaSignature*******";
+      const o1jsHash = Poseidon.hashWithPrefix(prefix, [testField]);
+
+      // Convert for Solidity input
+      const step1 = await pallas.step1_prepareMessage("123");
+      const verificationId = await pallas.verificationCounter();
+      const point = { x: BigInt(0), y: BigInt(0) };
+      const step2 = await pallas.step2_prepareHashInput(
+        verificationId,
+        point,
+        BigInt(0)
+      );
+      const hashResult = await pallas.step3_computeHash(verificationId);
+
+      const solidityHash = await pallas.getVerificationState(verificationId);
+      expect(solidityHash.hash.toString()).to.equal(o1jsHash.toString());
+    });
+  });
+
+  describe("Signature Verification", function () {
+    it("Should verify if a Signature over a message is valid", async function () {
+      const { pallas } = await loadFixture(deployFixture);
+
+      // Generate random keypair
       const generatedPK = PrivateKey.random();
       const key = generatedPK.toPublicKey().toGroup();
-      const key_x = BigInt(key.x.toString());
-      const key_y = BigInt(key.y.toString());
+      const key_x = key.x.toBigInt(); // Using toBigInt() instead of toString()
+      const key_y = key.y.toBigInt();
 
       const message = "Hi";
       const client = new Client({ network: "testnet" });
       const signedMessage = client.signMessage(message, generatedPK.toBase58());
 
-      const scalarValue = BigInt(signedMessage.signature.scalar);
-      const scalarModulus = await pallas.SCALAR_MODULUS();
+      const SCALAR_MODULUS = await pallas.SCALAR_MODULUS();
 
-      console.log("\nDebug Values:");
-      console.log("Original scalar (s):", scalarValue.toString());
-      console.log("SCALAR_MODULUS:", scalarModulus.toString());
-      console.log("Is s < SCALAR_MODULUS?", scalarValue < scalarModulus);
-
-      const signature = {
-        r: BigInt(signedMessage.signature.field),
-        s: scalarValue % scalarModulus,
-      };
-
-      const point = {
-        x: key_x,
-        y: key_y,
-      };
-
-      console.log("\nFinal Values:");
-      console.log("Modified scalar (s):", signature.s.toString());
-      console.log("Signature r:", signature.r.toString());
-      console.log("Public Key x:", point.x.toString());
-      console.log("Public Key y:", point.y.toString());
-
-      console.log("\no1js intermediate values:");
-      const publicKeyPoint = { x: key_x, y: key_y };
+      const point = { x: key_x, y: key_y };
       const r = BigInt(signedMessage.signature.field);
-      const s = scalarValue % scalarModulus;
+      const s = BigInt(signedMessage.signature.scalar) % SCALAR_MODULUS; // Make sure s is reduced
 
-      // Create field elements
-      const messageField = Field(26952); // "Hi"
-      const xField = Field(key_x);
-      const yField = Field(key_y);
-      const rField = Field(r);
+      // Create fields for hash computation
+      const messageField = Field(26952); // "Hi" converted
+      const xField = Field.fromBigInt(key_x);
+      const yField = Field.fromBigInt(key_y);
+      const rField = Field.fromBigInt(r);
 
-      // Use Poseidon hash
+      // Compute o1js hash
       const hash = Poseidon.hashWithPrefix("CodaSignature*******", [
         messageField,
         xField,
         yField,
         rField,
       ]);
-      console.log("o1js hash:", hash.toString());
-
-      // Create points using Group
-      const P = Group.from({ x: key_x, y: key_y });
-      const G = Group.generator; // Base point
-
-      // Compute h*P
-      const hP = Group.scale(P, hash);
-      console.log("o1js hP - x:", hP.x.toString());
-      console.log("o1js hP - y:", hP.y.toString());
-
-      // Compute s*G
-      const sG = Group.scale(G, s);
-      console.log("o1js sG - x:", sG.x.toString());
-      console.log("o1js sG - y:", sG.y.toString());
-
-      // Compute final point R = sG - hP
-      const neghP = Group.negate(hP);
-      const R = Group.add(sG, neghP);
-      console.log("o1js final R - x:", R.x.toString());
-      console.log("o1js final R - y:", R.y.toString());
-      console.log(
-        "o1js R.x === signature.r:",
-        Field(R.x).toString() === signature.r.toString()
-      );
-      console.log("o1js R.y is even:", BigInt(R.y.toString()) % 2n === 0n);
 
       try {
-        // Step 1: Prepare message and get verification ID
+        // Step 1: Message preparation
         const step1Tx = await pallas.step1_prepareMessage(message);
         await step1Tx.wait();
         const verificationId = await pallas.verificationCounter();
 
+        // Step 2: Hash input preparation
         const step2Tx = await pallas.step2_prepareHashInput(
           verificationId,
           point,
-          signature.r
+          r
         );
         await step2Tx.wait();
 
+        // Step 3: Hash computation
         const step3Tx = await pallas.step3_computeHash(verificationId);
         await step3Tx.wait();
 
-        const step4Tx = await pallas.step4_computeHP(verificationId, point);
-        await step4Tx.wait();
+        // Compare hash
+        const solidityHash = await pallas.getVerificationState(verificationId);
+        expect(solidityHash.hash.toString()).to.equal(hash.toString());
 
-        const step5Tx = await pallas.step5_negatePoint(verificationId);
-        await step5Tx.wait();
+        // Complete verification steps
+        await pallas.step4_computeHP(verificationId, point);
+        await pallas.step5_negatePoint(verificationId);
+        await pallas.step6_computeSG(verificationId, s);
+        await pallas.step7_finalAddition(verificationId);
 
-        const step6Tx = await pallas.step6_computeSG(
-          verificationId,
-          signature.s
-        );
-        await step6Tx.wait();
-
-        const step7Tx = await pallas.step7_finalAddition(verificationId);
-        await step7Tx.wait();
-
-        const isValid = await pallas.step8_verify(verificationId, signature.r);
+        // Final verification
+        const isValid = await pallas.step8_verify(verificationId, r);
         expect(isValid).to.be.true;
       } catch (error) {
         console.error("Detailed error:", error);
         throw error;
       }
+    });
+
+    it("Should reject invalid signatures", async function () {
+      const { pallas } = await loadFixture(deployFixture);
+
+      const generatedPK = PrivateKey.random();
+      const key = generatedPK.toPublicKey().toGroup();
+      const point = {
+        x: key.x.toBigInt(),
+        y: key.y.toBigInt(),
+      };
+
+      const message = "Hi";
+      const client = new Client({ network: "testnet" });
+      const signedMessage = client.signMessage(message, generatedPK.toBase58());
+
+      // Modify signature to make it invalid
+      const invalidR = BigInt(signedMessage.signature.field) + 1n;
+
+      const step1Tx = await pallas.step1_prepareMessage(message);
+      await step1Tx.wait();
+      const verificationId = await pallas.verificationCounter();
+
+      await pallas.step2_prepareHashInput(verificationId, point, invalidR);
+      await pallas.step3_computeHash(verificationId);
+      await pallas.step4_computeHP(verificationId, point);
+      await pallas.step5_negatePoint(verificationId);
+      await pallas.step6_computeSG(
+        verificationId,
+        BigInt(signedMessage.signature.scalar)
+      );
+      await pallas.step7_finalAddition(verificationId);
+
+      const isValid = await pallas.step8_verify(verificationId, invalidR);
+      expect(isValid).to.be.false;
     });
   });
 });

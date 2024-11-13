@@ -31,11 +31,50 @@ contract PallasSignatureVerifier is
         Point finalR;
     }
 
+    function clearArrays(uint256 verificationId) internal {
+        delete signatureVerify[verificationId].messageFields;
+        delete signatureVerify[verificationId].hashInput;
+    }
+
+    // Helper function to clean up storage after verification
+    function cleanupVerification(uint256 verificationId) public {
+        delete signatureVerify[verificationId];
+    }
+
+    // Helper function to get current state
+    function getVerificationState(
+        uint256 verificationId
+    )
+        public
+        view
+        returns (
+            uint256 atStep,
+            uint256[] memory messageFields,
+            uint256[] memory hashInput,
+            uint256 hash,
+            Point memory hP,
+            Point memory negHp,
+            Point memory sG,
+            Point memory finalR
+        )
+    {
+        VerificationState storage state = signatureVerify[verificationId];
+        return (
+            state.atStep,
+            state.messageFields,
+            state.hashInput,
+            state.hash,
+            state.hP,
+            state.negHp,
+            state.sG,
+            state.finalR
+        );
+    }
+
     /**
      * @dev Check if a point is a valid Pallas curve point
      */
     function isValidPublicKey(Point memory point) public pure returns (bool) {
-        // Check coordinates are in field
         if (point.x >= FIELD_MODULUS || point.y >= FIELD_MODULUS) {
             return false;
         }
@@ -49,48 +88,24 @@ contract PallasSignatureVerifier is
         return lhs == rhs;
     }
 
-    function clearArrays(uint256 verificationId) internal {
-        delete signatureVerify[verificationId].messageFields;
-        delete signatureVerify[verificationId].hashInput;
-    }
-
     function step1_prepareMessage(
         string calldata message
     ) public returns (uint256[] memory) {
         verificationCounter++;
         uint256 currentId = verificationCounter;
 
-        // Clear any existing arrays
         clearArrays(currentId);
 
-        bytes memory messageBytes = bytes(message);
-        uint256[] memory fields = new uint256[](
-            (messageBytes.length + 31) / 32
-        );
+        // Convert to field using the same process as o1js
+        uint256 messageField = stringToField(message);
 
-        for (uint i = 0; i < fields.length; i++) {
-            uint256 field = 0;
-            for (
-                uint j = 0;
-                j < 32 && (i * 32 + j) < messageBytes.length;
-                j++
-            ) {
-                field |= uint256(uint8(messageBytes[i * 32 + j])) << (j * 8);
-            }
-            fields[i] = field % FIELD_MODULUS;
-        }
-
-        // Create new dynamic array in storage
-        signatureVerify[currentId].messageFields = new uint256[](fields.length);
-        for (uint i = 0; i < fields.length; i++) {
-            signatureVerify[currentId].messageFields[i] = fields[i];
-        }
+        // Store in state
+        signatureVerify[currentId].messageFields = new uint256[](1);
+        signatureVerify[currentId].messageFields[0] = messageField;
 
         signatureVerify[currentId].atStep = 1;
 
-        console.log("Message converted to fields:", fields[0]);
-        console.log("Verification ID:", currentId);
-        return fields;
+        return signatureVerify[currentId].messageFields;
     }
 
     function step2_prepareHashInput(
@@ -99,35 +114,19 @@ contract PallasSignatureVerifier is
         uint256 r
     ) public returns (uint256[] memory) {
         require(
-            signatureVerify[verificationId].atStep == 1,
-            "Must complete step 1 first"
+            signatureVerify[verificationId].messageFields.length > 0,
+            "No message fields found"
         );
 
-        uint256[] memory messageFields = signatureVerify[verificationId]
-            .messageFields;
-        require(messageFields.length > 0, "No message fields found");
+        uint256[] memory hashInput = new uint256[](4); // Length 4 for [messageField, pub.x, pub.y, r]
+        hashInput[0] = signatureVerify[verificationId].messageFields[0]; // The already hashed message
+        hashInput[1] = publicKey.x;
+        hashInput[2] = publicKey.y;
+        hashInput[3] = r;
 
-        uint256[] memory hashInput = new uint256[](messageFields.length + 3);
-
-        for (uint i = 0; i < messageFields.length; i++) {
-            hashInput[i] = messageFields[i];
-        }
-
-        hashInput[messageFields.length] = publicKey.x;
-        hashInput[messageFields.length + 1] = publicKey.y;
-        hashInput[messageFields.length + 2] = r;
-
-        // Store in state with proper array handling
-        signatureVerify[verificationId].hashInput = new uint256[](
-            hashInput.length
-        );
-        for (uint i = 0; i < hashInput.length; i++) {
-            signatureVerify[verificationId].hashInput[i] = hashInput[i];
-        }
-
+        signatureVerify[verificationId].hashInput = hashInput;
         signatureVerify[verificationId].atStep = 2;
 
-        console.log("Hash input prepared. Length:", hashInput.length);
         return hashInput;
     }
 
@@ -258,38 +257,54 @@ contract PallasSignatureVerifier is
         return xMatches && yIsEven;
     }
 
-    // Helper function to clean up storage after verification
-    function cleanupVerification(uint256 verificationId) public {
-        delete signatureVerify[verificationId];
+    function stringToCharacterArray(
+        string memory str
+    ) internal pure returns (uint256[] memory) {
+        bytes memory strBytes = bytes(str);
+        uint256[] memory chars = new uint256[](strBytes.length);
+
+        for (uint i = 0; i < strBytes.length; i++) {
+            // Convert each character to its character code (equivalent to charCodeAt)
+            chars[i] = uint256(uint8(strBytes[i]));
+        }
+
+        // Pad with null characters (value 0) up to maxLength if needed
+        uint256[] memory paddedChars;
+        if (chars.length < DEFAULT_STRING_LENGTH) {
+            paddedChars = new uint256[](DEFAULT_STRING_LENGTH);
+            for (uint i = 0; i < chars.length; i++) {
+                paddedChars[i] = chars[i];
+            }
+            // Rest are initialized to 0 (null character)
+        } else {
+            paddedChars = chars;
+        }
+
+        return paddedChars;
     }
 
-    // Helper function to get current state
-    function getVerificationState(
-        uint256 verificationId
-    )
-        public
-        view
-        returns (
-            uint256 atStep,
-            uint256[] memory messageFields,
-            uint256[] memory hashInput,
-            uint256 hash,
-            Point memory hP,
-            Point memory negHp,
-            Point memory sG,
-            Point memory finalR
-        )
-    {
-        VerificationState storage state = signatureVerify[verificationId];
-        return (
-            state.atStep,
-            state.messageFields,
-            state.hashInput,
-            state.hash,
-            state.hP,
-            state.negHp,
-            state.sG,
-            state.finalR
-        );
+    function stringToField(string memory str) internal view returns (uint256) {
+        bytes memory strBytes = bytes(str);
+
+        // Create array of character codes
+        uint256[] memory chars = new uint256[](DEFAULT_STRING_LENGTH);
+
+        // Fill with actual characters
+        for (uint i = 0; i < strBytes.length; i++) {
+            chars[i] = uint256(uint8(strBytes[i]));
+        }
+
+        // Rest are already 0 (null characters)
+
+        console.log("Character array size:", chars.length);
+        for (uint i = 0; i < strBytes.length; i++) {
+            console.log("Char at %d: %d", i, chars[i]);
+        }
+
+        // Hash all 128 characters as one array
+        uint256[3] memory state = [uint256(0), uint256(0), uint256(0)];
+        state = update(state, chars);
+
+        return state[0];
     }
 }
