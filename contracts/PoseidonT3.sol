@@ -70,19 +70,15 @@ contract PoseidonT3 is PallasConstants {
         require(prefixBytes.length * 8 < 255, "prefix too long");
 
         uint256 result = 0;
-        console.log("Converting prefix: %s", prefix);
-        console.log("Prefix length: %d", prefixBytes.length);
 
         for (uint i = 0; i < prefixBytes.length; i++) {
             uint8 c = uint8(prefixBytes[i]);
             require(c < 128, "only ASCII characters supported");
-            console.log("Character %d: %d", i, c);
             for (uint j = 0; j < 8; j++) {
                 result = (result << 1) | (c & 1);
                 c = c >> 1;
             }
         }
-        console.log("Final prefix field: %d", result % FIELD_MODULUS);
         return result % FIELD_MODULUS;
     }
 
@@ -90,22 +86,8 @@ contract PoseidonT3 is PallasConstants {
         uint256[3] memory state
     ) internal view returns (uint256[3] memory) {
         uint256[3] memory currentState = state;
-        console.log(
-            "Initial state: [%d, %d, %d]",
-            currentState[0],
-            currentState[1],
-            currentState[2]
-        );
 
         for (uint256 round = 0; round < POSEIDON_FULL_ROUNDS; round++) {
-            if (round == 0) {
-                console.log(
-                    "After first round: [%d, %d, %d]",
-                    currentState[0],
-                    currentState[1],
-                    currentState[2]
-                );
-            }
             // Rest of the permutation logic
             for (uint256 i = 0; i < 3; i++) {
                 currentState[i] = power7(currentState[i]);
@@ -120,12 +102,6 @@ contract PoseidonT3 is PallasConstants {
             }
         }
 
-        console.log(
-            "Final state: [%d, %d, %d]",
-            currentState[0],
-            currentState[1],
-            currentState[2]
-        );
         return currentState;
     }
 
@@ -174,7 +150,7 @@ contract PoseidonT3 is PallasConstants {
     /**
      * @dev Hash with prefix exactly as in o1js
      */
-    function hashWithPrefix(
+    function hashPoseidonWithPrefix(
         string memory prefix,
         uint256[] memory input
     ) public view returns (uint256) {
@@ -183,7 +159,15 @@ contract PoseidonT3 is PallasConstants {
         uint256[] memory prefixArray = new uint256[](1);
         prefixArray[0] = prefixToField(prefix);
         state = update(state, prefixArray);
+        state = update(state, input);
 
+        return state[0];
+    }
+
+    function hashPoseidon(
+        uint256[] memory input
+    ) public view returns (uint256) {
+        uint256[3] memory state = initialState();
         state = update(state, input);
 
         return state[0];

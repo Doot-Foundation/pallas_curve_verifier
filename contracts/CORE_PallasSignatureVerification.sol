@@ -18,13 +18,14 @@ contract PallasSignatureVerifier is
     PoseidonT3
 {
     uint256 public verificationCounter;
-    mapping(uint256 => VerificationState) public signatureVerify;
+    mapping(uint256 => VerificationState) public signatureLifeCycle;
 
     struct VerificationState {
         uint256 atStep;
+        CircuitString messageCircuitString;
         uint256[] messageFields;
         uint256[] hashInput;
-        uint256 hash;
+        uint256 hashGenerated;
         Point hP;
         Point negHp;
         Point sG;
@@ -32,43 +33,23 @@ contract PallasSignatureVerifier is
     }
 
     function clearArrays(uint256 verificationId) internal {
-        delete signatureVerify[verificationId].messageFields;
-        delete signatureVerify[verificationId].hashInput;
+        delete signatureLifeCycle[verificationId].messageFields;
+        delete signatureLifeCycle[verificationId].hashInput;
     }
 
     // Helper function to clean up storage after verification
     function cleanupVerification(uint256 verificationId) public {
-        delete signatureVerify[verificationId];
+        delete signatureLifeCycle[verificationId];
     }
 
     // Helper function to get current state
     function getVerificationState(
         uint256 verificationId
-    )
-        public
-        view
-        returns (
-            uint256 atStep,
-            uint256[] memory messageFields,
-            uint256[] memory hashInput,
-            uint256 hash,
-            Point memory hP,
-            Point memory negHp,
-            Point memory sG,
-            Point memory finalR
-        )
-    {
-        VerificationState storage state = signatureVerify[verificationId];
-        return (
-            state.atStep,
-            state.messageFields,
-            state.hashInput,
-            state.hash,
-            state.hP,
-            state.negHp,
-            state.sG,
-            state.finalR
-        );
+    ) public view returns (VerificationState memory state) {
+        VerificationState storage returnedState = signatureLifeCycle[
+            verificationId
+        ];
+        return returnedState;
     }
 
     /**
@@ -100,12 +81,12 @@ contract PallasSignatureVerifier is
         uint256 messageField = stringToField(message);
 
         // Store in state
-        signatureVerify[currentId].messageFields = new uint256[](1);
-        signatureVerify[currentId].messageFields[0] = messageField;
+        signatureLifeCycle[currentId].messageFields = new uint256[](1);
+        signatureLifeCycle[currentId].messageFields[0] = messageField;
 
-        signatureVerify[currentId].atStep = 1;
+        signatureLifeCycle[currentId].atStep = 1;
 
-        return signatureVerify[currentId].messageFields;
+        return signatureLifeCycle[currentId].messageFields;
     }
 
     function step2_prepareHashInput(
@@ -114,18 +95,18 @@ contract PallasSignatureVerifier is
         uint256 r
     ) public returns (uint256[] memory) {
         require(
-            signatureVerify[verificationId].messageFields.length > 0,
+            signatureLifeCycle[verificationId].messageFields.length > 0,
             "No message fields found"
         );
 
         uint256[] memory hashInput = new uint256[](4); // Length 4 for [messageField, pub.x, pub.y, r]
-        hashInput[0] = signatureVerify[verificationId].messageFields[0]; // The already hashed message
+        hashInput[0] = signatureLifeCycle[verificationId].messageFields[0]; // The already hashed message
         hashInput[1] = publicKey.x;
         hashInput[2] = publicKey.y;
         hashInput[3] = r;
 
-        signatureVerify[verificationId].hashInput = hashInput;
-        signatureVerify[verificationId].atStep = 2;
+        signatureLifeCycle[verificationId].hashInput = hashInput;
+        signatureLifeCycle[verificationId].atStep = 2;
 
         return hashInput;
     }
@@ -134,26 +115,30 @@ contract PallasSignatureVerifier is
         uint256 verificationId
     ) public returns (uint256) {
         require(
-            signatureVerify[verificationId].atStep == 2,
+            signatureLifeCycle[verificationId].atStep == 2,
             "Must complete step 2 first"
         );
         require(
-            signatureVerify[verificationId].hashInput.length > 0,
+            signatureLifeCycle[verificationId].hashInput.length > 0,
             "No hash input found"
         );
 
-        uint256[] memory hashInput = signatureVerify[verificationId].hashInput;
-        uint256 hash = hashWithPrefix(SIGNATURE_PREFIX, hashInput);
+        uint256[] memory hashInput = signatureLifeCycle[verificationId]
+            .hashInput;
+        uint256 hashGenerated = hashPoseidonWithPrefix(
+            SIGNATURE_PREFIX,
+            hashInput
+        );
 
-        signatureVerify[verificationId].hash = hash;
-        signatureVerify[verificationId].atStep = 3;
+        signatureLifeCycle[verificationId].hashGenerated = hashGenerated;
+        signatureLifeCycle[verificationId].atStep = 3;
 
         // Clear arrays we don't need anymore
-        delete signatureVerify[verificationId].messageFields;
-        delete signatureVerify[verificationId].hashInput;
+        delete signatureLifeCycle[verificationId].messageFields;
+        delete signatureLifeCycle[verificationId].hashInput;
 
-        console.log("Hash computed:", hash);
-        return hash;
+        console.log("Hash computed:", hashGenerated);
+        return hashGenerated;
     }
 
     function step4_computeHP(
@@ -161,15 +146,16 @@ contract PallasSignatureVerifier is
         Point calldata publicKey
     ) public returns (Point memory) {
         require(
-            signatureVerify[verificationId].atStep == 3,
+            signatureLifeCycle[verificationId].atStep == 3,
             "Must complete step 3 first"
         );
 
-        uint256 hash = signatureVerify[verificationId].hash;
-        Point memory result = scalarMul(publicKey, hash);
+        uint256 hashGenerated = signatureLifeCycle[verificationId]
+            .hashGenerated;
+        Point memory result = scalarMul(publicKey, hashGenerated);
 
-        signatureVerify[verificationId].hP = result;
-        signatureVerify[verificationId].atStep = 4;
+        signatureLifeCycle[verificationId].hP = result;
+        signatureLifeCycle[verificationId].atStep = 4;
 
         console.log("hP computed - x:", result.x, "y:", result.y);
         return result;
@@ -179,15 +165,15 @@ contract PallasSignatureVerifier is
         uint256 verificationId
     ) public returns (Point memory) {
         require(
-            signatureVerify[verificationId].atStep == 4,
+            signatureLifeCycle[verificationId].atStep == 4,
             "Must complete step 4 first"
         );
 
-        Point memory hP = signatureVerify[verificationId].hP;
+        Point memory hP = signatureLifeCycle[verificationId].hP;
         Point memory negHp = Point(hP.x, FIELD_MODULUS - hP.y);
 
-        signatureVerify[verificationId].negHp = negHp;
-        signatureVerify[verificationId].atStep = 5;
+        signatureLifeCycle[verificationId].negHp = negHp;
+        signatureLifeCycle[verificationId].atStep = 5;
 
         return negHp;
     }
@@ -197,15 +183,15 @@ contract PallasSignatureVerifier is
         uint256 s
     ) public returns (Point memory) {
         require(
-            signatureVerify[verificationId].atStep == 5,
+            signatureLifeCycle[verificationId].atStep == 5,
             "Must complete step 5 first"
         );
 
         Point memory G = Point(G_X, G_Y);
         Point memory sG = scalarMul(G, s);
 
-        signatureVerify[verificationId].sG = sG;
-        signatureVerify[verificationId].atStep = 6;
+        signatureLifeCycle[verificationId].sG = sG;
+        signatureLifeCycle[verificationId].atStep = 6;
 
         console.log("sG computed - x:", sG.x, "y:", sG.y);
         return sG;
@@ -215,17 +201,17 @@ contract PallasSignatureVerifier is
         uint256 verificationId
     ) public returns (Point memory) {
         require(
-            signatureVerify[verificationId].atStep == 6,
+            signatureLifeCycle[verificationId].atStep == 6,
             "Must complete step 6 first"
         );
 
-        Point memory sG = signatureVerify[verificationId].sG;
-        Point memory negHp = signatureVerify[verificationId].negHp;
+        Point memory sG = signatureLifeCycle[verificationId].sG;
+        Point memory negHp = signatureLifeCycle[verificationId].negHp;
 
         Point memory result = addPoints(sG, negHp);
 
-        signatureVerify[verificationId].finalR = result;
-        signatureVerify[verificationId].atStep = 7;
+        signatureLifeCycle[verificationId].finalR = result;
+        signatureLifeCycle[verificationId].atStep = 7;
 
         console.log("Final addition - x:", result.x, "y:", result.y);
         return result;
@@ -236,11 +222,11 @@ contract PallasSignatureVerifier is
         uint256 expectedR
     ) public view returns (bool) {
         require(
-            signatureVerify[verificationId].atStep == 7,
+            signatureLifeCycle[verificationId].atStep == 7,
             "Must complete step 7 first"
         );
 
-        Point memory r = signatureVerify[verificationId].finalR;
+        Point memory r = signatureLifeCycle[verificationId].finalR;
 
         console.log("Verifying...");
         console.log("Computed x:", r.x);
@@ -283,6 +269,50 @@ contract PallasSignatureVerifier is
         return paddedChars;
     }
 
+    struct Character {
+        uint256 value;
+    }
+
+    struct CircuitString {
+        Character[DEFAULT_STRING_LENGTH] values;
+    }
+
+    Character[DEFAULT_STRING_LENGTH] public latestGenerated;
+    uint256 public latestHash;
+
+    function getAllLatestGenerated()
+        public
+        view
+        returns (Character[DEFAULT_STRING_LENGTH] memory)
+    {
+        return latestGenerated;
+    }
+
+    // Main public interface - equivalent to CircuitString.fromString() in JS
+    function fromString(string memory str) public {
+        bytes memory strBytes = bytes(str);
+        require(
+            strBytes.length <= DEFAULT_STRING_LENGTH,
+            "CircuitString.fromString: input string exceeds max length!"
+        );
+
+        // Create and fill the character array
+        Character[] memory chars = new Character[](DEFAULT_STRING_LENGTH);
+
+        // Fill with actual characters
+        for (uint i = 0; i < strBytes.length; i++) {
+            chars[i] = Character(uint256(uint8(strBytes[i])));
+            latestGenerated[i] = Character(uint256(uint8(strBytes[i])));
+        }
+
+        // Fill remaining slots with null characters
+        for (uint i = strBytes.length; i < DEFAULT_STRING_LENGTH; i++) {
+            chars[i] = Character(0);
+            latestGenerated[i] = Character(0);
+        }
+        // return CircuitStringStruct(chars);
+    }
+
     function stringToField(string memory str) internal view returns (uint256) {
         bytes memory strBytes = bytes(str);
 
@@ -306,5 +336,14 @@ contract PallasSignatureVerifier is
         state = update(state, chars);
 
         return state[0];
+    }
+
+    function hash(Character[DEFAULT_STRING_LENGTH] memory input) public {
+        uint256[] memory values = new uint256[](DEFAULT_STRING_LENGTH);
+        for (uint i = 0; i < input.length; i++) {
+            values[i] = input[i].value;
+        }
+
+        latestHash = hashPoseidon(values);
     }
 }
