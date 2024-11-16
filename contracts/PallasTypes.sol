@@ -6,13 +6,18 @@ pragma solidity ^0.8.0;
  * @dev Common types used in Pallas operations
  */
 contract PallasTypes {
-  struct Point {
-    uint256 x;
-    uint256 y;
-  }
+    struct Point {
+        uint256 x;
+        uint256 y;
+    }
 
-  struct Signature {
-    uint256 r; // x-coordinate of R
-    uint256 s; // scalar value
-  }
+    struct SignatureJSON {
+        uint256 field;
+        uint256 scalar;
+    }
+
+    struct Signature {
+        uint256 r; // x-coordinate of R
+        uint256 s; // scalar value
+    }
 }

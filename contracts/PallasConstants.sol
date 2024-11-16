@@ -27,6 +27,7 @@ contract PallasConstants {
 
     // Signature constants
     string public constant SIGNATURE_PREFIX = "CodaSignature*******";
+    string public constant MAINNET_SIGNATURE_PREFIX = "MinaSignatureMainnet";
 
     uint256[3][3] public mdsMatrix = [
         [

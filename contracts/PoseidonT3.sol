@@ -10,6 +10,38 @@ import "hardhat/console.sol";
  */
 contract PoseidonT3 is PallasConstants {
     /**
+     * @dev Power7 function matching o1js implementation
+     */
+    function power7(uint256 x) internal pure returns (uint256) {
+        uint256 x2 = mulmod(x, x, FIELD_MODULUS);
+        uint256 x3 = mulmod(x2, x, FIELD_MODULUS);
+        uint256 x6 = mulmod(x3, x3, FIELD_MODULUS);
+        return mulmod(x6, x, FIELD_MODULUS);
+    }
+
+    /**
+     * @dev Poseidon permutation exactly matching o1js
+     */
+    function prefixToField(
+        string memory prefix
+    ) internal pure returns (uint256) {
+        bytes memory prefixBytes = bytes(prefix);
+        require(prefixBytes.length * 8 < 255, "prefix too long");
+
+        uint256 result = 0;
+
+        for (uint i = 0; i < prefixBytes.length; i++) {
+            uint8 c = uint8(prefixBytes[i]);
+            require(c < 128, "only ASCII characters supported");
+            for (uint j = 0; j < 8; j++) {
+                result = (result << 1) | (c & 1);
+                c = c >> 1;
+            }
+        }
+        return result % FIELD_MODULUS;
+    }
+
+    /**
      * @dev Returns MDS matrix values by index
      */
     function getMdsValue(
@@ -52,36 +84,6 @@ contract PoseidonT3 is PallasConstants {
         }
     }
 
-    /**
-     * @dev Power7 function matching o1js implementation
-     */
-    function power7(uint256 x) internal pure returns (uint256) {
-        uint256 x2 = mulmod(x, x, FIELD_MODULUS);
-        uint256 x3 = mulmod(x2, x, FIELD_MODULUS);
-        uint256 x6 = mulmod(x3, x3, FIELD_MODULUS);
-        return mulmod(x6, x, FIELD_MODULUS);
-    }
-
-    /**
-     * @dev Poseidon permutation exactly matching o1js
-     */
-    function prefixToField(string memory prefix) public pure returns (uint256) {
-        bytes memory prefixBytes = bytes(prefix);
-        require(prefixBytes.length * 8 < 255, "prefix too long");
-
-        uint256 result = 0;
-
-        for (uint i = 0; i < prefixBytes.length; i++) {
-            uint8 c = uint8(prefixBytes[i]);
-            require(c < 128, "only ASCII characters supported");
-            for (uint j = 0; j < 8; j++) {
-                result = (result << 1) | (c & 1);
-                c = c >> 1;
-            }
-        }
-        return result % FIELD_MODULUS;
-    }
-
     function poseidonPermutation(
         uint256[3] memory state
     ) internal view returns (uint256[3] memory) {
@@ -108,7 +110,7 @@ contract PoseidonT3 is PallasConstants {
     /**
      * @dev Initial state array [0, 0, 0]
      */
-    function initialState() public pure returns (uint256[3] memory) {
+    function initialState() internal pure returns (uint256[3] memory) {
         return [uint256(0), uint256(0), uint256(0)];
     }
 
@@ -118,7 +120,7 @@ contract PoseidonT3 is PallasConstants {
     function update(
         uint256[3] memory state,
         uint256[] memory input
-    ) public view returns (uint256[3] memory) {
+    ) internal view returns (uint256[3] memory) {
         if (input.length == 0) {
             return poseidonPermutation(state);
         }
@@ -172,4 +174,8 @@ contract PoseidonT3 is PallasConstants {
 
         return state[0];
     }
+
+    //  verifyFields({ data, signature, publicKey }) {
+    //     return verify(Signature.fromBase58(signature), { fields: data }, PublicKey.fromBase58(publicKey), 'testnet');
+    // }
 }
