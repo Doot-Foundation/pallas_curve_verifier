@@ -8,6 +8,7 @@ import "./PoseidonT3.sol";
 import "hardhat/console.sol";
 
 error InvalidPublicKey();
+error StepSkipped();
 
 /**
  * @title PallasSignatureVerifier
@@ -55,6 +56,14 @@ contract PallasSignatureVerifier is
     }
     modifier isVFCreator(uint256 id) {
         require(msg.sender == vfLifeCycleCreator[id]);
+        _;
+    }
+    modifier isValidVFId(uint256 id) {
+        require(id < vfCounter);
+        _;
+    }
+    modifier isValidVMId(uint256 id) {
+        require(id < vmCounter);
         _;
     }
 
@@ -123,6 +132,49 @@ contract PallasSignatureVerifier is
         vfLifeCycleCreator[toSetId] = msg.sender;
 
         return toSetId;
+    }
+
+    function step_1_VF(uint256 vfId) external isValidVFId(vfId) {
+        VerifyFieldsState storage current = vfLifeCycle[vfId];
+        if (current.atStep != 0) revert StepSkipped();
+
+        current.atStep = 1;
+    }
+
+    function step_2_VF(uint256 vfId) external isValidVFId(vfId) {
+        VerifyFieldsState storage current = vfLifeCycle[vfId];
+        if (current.atStep != 1) revert StepSkipped();
+        current.atStep = 2;
+    }
+
+    function step_3_VF(uint256 vfId) external isValidVFId(vfId) {
+        VerifyFieldsState storage current = vfLifeCycle[vfId];
+        if (current.atStep != 2) revert StepSkipped();
+        current.atStep = 3;
+    }
+
+    function step_4_VF(uint256 vfId) external isValidVFId(vfId) {
+        VerifyFieldsState storage current = vfLifeCycle[vfId];
+        if (current.atStep != 3) revert StepSkipped();
+        current.atStep = 4;
+    }
+
+    function step_5_VF(uint256 vfId) external isValidVFId(vfId) {
+        VerifyFieldsState storage current = vfLifeCycle[vfId];
+        if (current.atStep != 4) revert StepSkipped();
+        current.atStep = 5;
+    }
+
+    function step_6_VF(uint256 vfId) external isValidVFId(vfId) {
+        VerifyFieldsState storage current = vfLifeCycle[vfId];
+        if (current.atStep != 5) revert StepSkipped();
+        current.atStep = 6;
+    }
+
+    function step_7_VF(uint256 vfId) external isValidVFId(vfId) {
+        VerifyFieldsState storage current = vfLifeCycle[vfId];
+        if (current.atStep != 6) revert StepSkipped();
+        current.atStep = 7;
     }
 
     function step_0_VM_assignValues(
@@ -401,8 +453,8 @@ contract PallasSignatureVerifier is
 
     /// @dev Equivalent to CircuitString.from(str).hash() from o1js
     /// @param str The message string.
-    /// @return charValues Character representation of a message string.
-    /// @return charHash The generated hash.
+    /// @return charValues Character representation of a message string. Equivalent to CircuitString.from(str).
+    /// @return charHash The generated hash. Equivalent to hash over a Field[].
     function fromStringToHash(
         string memory str
     ) internal view returns (uint256[] memory, uint256) {
