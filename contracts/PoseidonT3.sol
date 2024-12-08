@@ -174,8 +174,4 @@ contract PoseidonT3 is PallasConstants {
 
         return state[0];
     }
-
-    //  verifyFields({ data, signature, publicKey }) {
-    //     return verify(Signature.fromBase58(signature), { fields: data }, PublicKey.fromBase58(publicKey), 'testnet');
-    // }
 }

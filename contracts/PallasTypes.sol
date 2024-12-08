@@ -11,6 +11,11 @@ contract PallasTypes {
         uint256 y;
     }
 
+    struct PointCompressed {
+        uint256 x;
+        bool isOdd;
+    }
+
     struct SignatureJSON {
         uint256 field;
         uint256 scalar;

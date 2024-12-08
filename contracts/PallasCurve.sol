@@ -362,4 +362,61 @@ contract PallasCurve is PallasConstants, PallasTypes {
         if (t < 0) t += int256(FIELD_MODULUS);
         return uint256(t);
     }
+
+    function sqrtmod(uint256 a, uint256 p) public pure returns (uint256) {
+        require(p % 4 == 3, "Only implemented for p = 3 mod 4"); // Pallas modulus satisfies this
+
+        // For p = 3 mod 4, sqrt(a) = a^((p+1)/4) mod p
+        uint256 exponent = (p + 1) / 4;
+
+        // Compute modular exponentiation
+        uint256 result = mulmod(1, a, p); // Initialize
+        uint256 base = a;
+
+        while (exponent > 0) {
+            if (exponent % 2 == 1) {
+                result = mulmod(result, base, p);
+            }
+            base = mulmod(base, base, p);
+            exponent = exponent / 2;
+        }
+
+        // Verify result
+        uint256 check = mulmod(result, result, p);
+        require(check == a, "Square root does not exist");
+
+        return result;
+    }
+
+    function modExp(
+        uint256 base,
+        uint256 exponent,
+        uint256 modulus
+    ) internal view returns (uint256 result) {
+        assembly {
+            // Free memory pointer
+            let p := mload(0x40)
+
+            // Store length of base, exponent and modulus
+            mstore(p, 0x20)
+            mstore(add(p, 0x20), 0x20)
+            mstore(add(p, 0x40), 0x20)
+
+            // Store base, exponent and modulus
+            mstore(add(p, 0x60), base)
+            mstore(add(p, 0x80), exponent)
+            mstore(add(p, 0xa0), modulus)
+
+            // Call precompiled contract for modular exponentiation
+            if iszero(staticcall(gas(), 0x05, p, 0xc0, p, 0x20)) {
+                revert(0, 0)
+            }
+
+            result := mload(p)
+        }
+    }
+
+    function isEven(uint256 x) internal pure returns (bool) {
+        return (x & 1) == 0;
+    }
 }

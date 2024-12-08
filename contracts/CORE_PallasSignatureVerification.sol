@@ -22,24 +22,34 @@ contract PallasSignatureVerifier is
 {
     struct VerifyMessageState {
         uint8 atStep;
+        bool mainnet; // Added for network type
         Point publicKey;
         Signature signature;
         string message;
-        uint256 messageHash;
-        uint256 hashGenerated;
-        Point hP;
-        Point negHp;
-        Point sG;
-        Point finalR;
-        uint256[4] hashInput;
+        uint256[] charValues; // For storing the character array
+        uint256 messageHash; // For storing the computed hash
+        Point pkInGroup; // Public key in group form
+        Point sG; // s*G computation
+        Point ePk; // e*pkInGroup computation
+        Point R; // Final point
+        bool isValid; // Final result
     }
+
     struct VerifyFieldsState {
-        bool init;
-        bool mainnet;
-        uint8 atStep;
-        Point publicKey;
-        Signature signature;
-        uint256[] fields;
+        bool init; // To track if state was initialized
+        bool mainnet; // Network flag
+        uint8 atStep; // Current step tracker
+        Point publicKey; // User provided public key
+        Signature signature; // User provided signature
+        uint256[] fields; // Fields to verify
+        // Added intermediate computation states
+        string prefix; // Stored prefix as field element (step 1)
+        uint256 messageHash; // 'e' value computed from fields (step 2)
+        Point pkInGroup; // Public key converted to curve point (step 3)
+        Point sG; // Result of scalar multiplication s*G (step 4)
+        Point ePk; // Result of scalar multiplication e*pkInGroup (step 5)
+        Point R; // Final computed point R = sG - ePk (step 6)
+        bool isValid; // Final verification result
     }
 
     uint256 public vmCounter = 0;
@@ -106,8 +116,8 @@ contract PallasSignatureVerifier is
     }
 
     /// @dev verifyFields() method from o1js.
-    /// @param _signature The associated Schorr Signature
     /// @param _publicKey The pallas point (Public Key) of the signer
+    /// @param _signature The associated Schorr Signature
     /// @param _fields The fields array.
     /// @param _network False for 'testnet' and True for 'mainnet'
     function step_0_VF_assignValues(
@@ -138,318 +148,170 @@ contract PallasSignatureVerifier is
         VerifyFieldsState storage current = vfLifeCycle[vfId];
         if (current.atStep != 0) revert StepSkipped();
 
+        // Store actual string prefix
+        current.prefix = current.mainnet
+            ? "MinaSignatureMainnet"
+            : "CodaSignature*******";
+
         current.atStep = 1;
     }
 
     function step_2_VF(uint256 vfId) external isValidVFId(vfId) {
         VerifyFieldsState storage current = vfLifeCycle[vfId];
         if (current.atStep != 1) revert StepSkipped();
+
+        uint256[] memory input = current.fields;
+        // Now passing string prefix directly
+        current.messageHash = hashPoseidonWithPrefix(current.prefix, input);
         current.atStep = 2;
     }
 
     function step_3_VF(uint256 vfId) external isValidVFId(vfId) {
         VerifyFieldsState storage current = vfLifeCycle[vfId];
         if (current.atStep != 2) revert StepSkipped();
+
+        // Create compressed point format from public key
+        PointCompressed memory compressed = PointCompressed({
+            x: current.publicKey.x,
+            isOdd: (current.publicKey.y % 2 == 1)
+        });
+
+        // Convert to group point
+        current.pkInGroup = defaultToGroup(compressed);
         current.atStep = 3;
     }
 
     function step_4_VF(uint256 vfId) external isValidVFId(vfId) {
         VerifyFieldsState storage current = vfLifeCycle[vfId];
         if (current.atStep != 3) revert StepSkipped();
+
+        // Calculate s*G where G is generator point
+        Point memory G = Point(G_X, G_Y); // From PallasConstants
+        current.sG = scalarMul(G, current.signature.s);
         current.atStep = 4;
     }
 
     function step_5_VF(uint256 vfId) external isValidVFId(vfId) {
         VerifyFieldsState storage current = vfLifeCycle[vfId];
         if (current.atStep != 4) revert StepSkipped();
+
+        // Calculate e*pkInGroup where e is the message hash
+        current.ePk = scalarMul(current.pkInGroup, current.messageHash);
         current.atStep = 5;
     }
 
     function step_6_VF(uint256 vfId) external isValidVFId(vfId) {
         VerifyFieldsState storage current = vfLifeCycle[vfId];
         if (current.atStep != 5) revert StepSkipped();
+
+        // R = sG - ePk
+        current.R = addPoints(
+            current.sG,
+            Point(current.ePk.x, FIELD_MODULUS - current.ePk.y) // Negate ePk.y to subtract
+        );
+
         current.atStep = 6;
     }
 
     function step_7_VF(uint256 vfId) external isValidVFId(vfId) {
         VerifyFieldsState storage current = vfLifeCycle[vfId];
         if (current.atStep != 6) revert StepSkipped();
+
+        // No additional computation needed as we're already in affine
+        // In the JS version, this is where R gets converted from projective to affine
+        // But our addPoints already returns affine coordinates
+
         current.atStep = 7;
     }
 
+    function step_8_VF(uint256 vfId) external isValidVFId(vfId) returns (bool) {
+        VerifyFieldsState storage current = vfLifeCycle[vfId];
+        if (current.atStep != 7) revert StepSkipped();
+
+        // Final verification:
+        // 1. Check R.x equals signature.r
+        // 2. Check R.y is even
+        current.isValid =
+            (current.R.x == current.signature.r) &&
+            isEven(current.R.y);
+        current.atStep = 8;
+
+        return current.isValid;
+    }
+
+    /// @dev verifyMessage()
+    /// @param _signature The associated signature.
+    /// @param _publicKey The public key.
+    /// @param message The string message
     function step_0_VM_assignValues(
         Signature calldata _signature,
         Point calldata _publicKey,
         string calldata message
-    ) external returns (uint256) {}
+    ) external returns (uint256) {
+        if (!isValidPublicKey(_publicKey)) revert InvalidPublicKey();
 
-    // function step1_VM_prepareMessage(string calldata message) external {
-    //     uint256 currentId = verificationCounter;
-    //     ++verificationCounter;
+        uint256 toSetId = vmCounter;
+        ++vmCounter;
 
-    //     cleanupVerification(currentId);
+        VerifyMessageState storage toPush = vmLifeCycle[toSetId];
+        toPush.atStep = 0;
+        toPush.publicKey = _publicKey;
+        toPush.signature = _signature;
+        toPush.message = message;
 
-    //     (, uint256 returnedMessageHash) = fromStringToHash(message);
+        vmLifeCycleCreator[toSetId] = msg.sender;
 
-    //     signatureLifeCycle[currentId].messageHash = returnedMessageHash;
-    //     signatureLifeCycle[currentId].message = message;
-    // }
+        return toSetId;
+    }
 
-    // function step2_prepareHashInput(
-    //     uint256 verificationId,
-    //     Point calldata publicKey,
-    //     Signature calldata signature,
-    //     uint256 r
-    // ) public {
-    //     VerificationState storage signatureLifeCycleObject = signatureLifeCycle[
-    //         verificationId
-    //     ];
+    function step_1_VM(uint256 vmId) external isValidVMId(vmId) {
+        VerifyMessageState storage current = vmLifeCycle[vmId];
+        if (current.atStep != 0) revert StepSkipped();
 
-    //     require(
-    //         signatureLifeCycleObject.messageHash > 0,
-    //         "No message fields found"
-    //     );
+        // Convert string to character array using fromStringToHash
+        uint256[] memory charValues;
+        uint256 hashUint;
+        (charValues, hashUint) = fromStringToHash(current.message);
 
-    //     // uint256[] memory hashInput = new uint256[](4); // Length 4 for [messageField, pub.x, pub.y, r]
-    //     signatureLifeCycleObject.hashInput[0] = signatureLifeCycle[
-    //         verificationId
-    //     ].messageHash;
-    //     signatureLifeCycleObject.hashInput[1] = publicKey.x;
-    //     signatureLifeCycleObject.hashInput[2] = publicKey.y;
-    //     signatureLifeCycleObject.hashInput[3] = r;
+        current.charValues = charValues;
+        current.messageHash = hashUint; // Store the hash too
 
-    //     signatureLifeCycle[verificationId].atStep = 2;
-    // }
+        current.atStep = 1;
+    }
 
-    // function step3_computeHash(
-    //     uint256 verificationId
-    // ) public returns (uint256) {
-    //     VerificationState storage signatureLifeCycleObject = signatureLifeCycle[
-    //         verificationId
-    //     ];
+    function step_2_VM(uint256 vmId) external isValidVMId(vmId) {
+        VerifyMessageState storage current = vmLifeCycle[vmId];
+        if (current.atStep != 1) revert StepSkipped();
 
-    //     require(
-    //         signatureLifeCycleObject.atStep == 2,
-    //         "Must complete step 2 first"
-    //     );
-    //     require(
-    //         signatureLifeCycleObject.hashInput.length > 0,
-    //         "No hash input found"
-    //     );
+        // Network prefix
+        string memory prefix = current.mainnet
+            ? "MinaSignatureMainnet"
+            : "CodaSignature*******";
 
-    //     uint256[] memory hashInput = new uint256[](4);
-    //     hashInput[0] = signatureLifeCycleObject.hashInput[0];
-    //     hashInput[1] = signatureLifeCycleObject.hashInput[1];
-    //     hashInput[2] = signatureLifeCycleObject.hashInput[2];
-    //     hashInput[3] = signatureLifeCycleObject.hashInput[3];
+        // Hash with prefix
+        current.messageHash = hashPoseidonWithPrefix(
+            prefix,
+            current.charValues
+        );
 
-    //     signatureLifeCycle[verificationId].hashInput;
-    //     uint256 hashGenerated = hashPoseidonWithPrefix(
-    //         SIGNATURE_PREFIX,
-    //         hashInput
-    //     );
+        current.atStep = 2;
+    }
 
-    //     signatureLifeCycle[verificationId].hashGenerated = hashGenerated;
-    //     signatureLifeCycle[verificationId].atStep = 3;
+    function step_3_VM(uint256 vmId) external isValidVMId(vmId) {
+        VerifyMessageState storage current = vmLifeCycle[vmId];
+        if (current.atStep != 2) revert StepSkipped();
 
-    //     console.log("Hash computed:", hashGenerated);
-    //     return hashGenerated;
-    // }
+        // Create compressed point format from public key
+        PointCompressed memory compressed = PointCompressed({
+            x: current.publicKey.x,
+            isOdd: (current.publicKey.y % 2 == 1)
+        });
 
-    // function step4_computeHP(
-    //     uint256 verificationId,
-    //     Point calldata publicKey
-    // ) public returns (Point memory) {
-    //     require(
-    //         signatureLifeCycle[verificationId].atStep == 3,
-    //         "Must complete step 3 first"
-    //     );
+        // Convert to group point
+        current.pkInGroup = defaultToGroup(compressed);
 
-    //     uint256 hashGenerated = signatureLifeCycle[verificationId]
-    //         .hashGenerated;
-    //     Point memory result = scalarMul(publicKey, hashGenerated);
-
-    //     signatureLifeCycle[verificationId].hP = result;
-    //     signatureLifeCycle[verificationId].atStep = 4;
-
-    //     console.log("hP computed - x:", result.x, "y:", result.y);
-    //     return result;
-    // }
-
-    // function step5_negatePoint(
-    //     uint256 verificationId
-    // ) public returns (Point memory) {
-    //     require(
-    //         signatureLifeCycle[verificationId].atStep == 4,
-    //         "Must complete step 4 first"
-    //     );
-
-    //     Point memory hP = signatureLifeCycle[verificationId].hP;
-    //     Point memory negHp = Point(hP.x, FIELD_MODULUS - hP.y);
-
-    //     signatureLifeCycle[verificationId].negHp = negHp;
-    //     signatureLifeCycle[verificationId].atStep = 5;
-
-    //     return negHp;
-    // }
-
-    // function step6_computeSG(
-    //     uint256 verificationId,
-    //     uint256 s
-    // ) public returns (Point memory) {
-    //     require(
-    //         signatureLifeCycle[verificationId].atStep == 5,
-    //         "Must complete step 5 first"
-    //     );
-
-    //     Point memory G = Point(G_X, G_Y);
-    //     Point memory sG = scalarMul(G, s);
-
-    //     signatureLifeCycle[verificationId].sG = sG;
-    //     signatureLifeCycle[verificationId].atStep = 6;
-
-    //     console.log("sG computed - x:", sG.x, "y:", sG.y);
-    //     return sG;
-    // }
-
-    // function step7_finalAddition(
-    //     uint256 verificationId
-    // ) public returns (Point memory) {
-    //     require(
-    //         signatureLifeCycle[verificationId].atStep == 6,
-    //         "Must complete step 6 first"
-    //     );
-
-    //     Point memory sG = signatureLifeCycle[verificationId].sG;
-    //     Point memory negHp = signatureLifeCycle[verificationId].negHp;
-
-    //     Point memory result = addPoints(sG, negHp);
-
-    //     signatureLifeCycle[verificationId].finalR = result;
-    //     signatureLifeCycle[verificationId].atStep = 7;
-
-    //     console.log("Final addition - x:", result.x, "y:", result.y);
-    //     return result;
-    // }
-
-    // function step8_verify(
-    //     uint256 verificationId,
-    //     uint256 expectedR
-    // ) public view returns (bool) {
-    //     require(
-    //         signatureLifeCycle[verificationId].atStep == 7,
-    //         "Must complete step 7 first"
-    //     );
-
-    //     Point memory r = signatureLifeCycle[verificationId].finalR;
-
-    //     console.log("Verifying...");
-    //     console.log("Computed x:", r.x);
-    //     console.log("Expected x:", expectedR);
-    //     console.log("y value:", r.y);
-    //     console.log("y mod 2:", r.y % 2);
-
-    //     bool xMatches = r.x == expectedR;
-    //     bool yIsEven = r.y % 2 == 0;
-
-    //     console.log("x matches:", xMatches);
-    //     console.log("y is even:", yIsEven);
-
-    //     return xMatches && yIsEven;
-    // }
-
-    // function stringToCharacterArray(
-    //     string memory str
-    // ) internal pure returns (uint256[] memory) {
-    //     bytes memory strBytes = bytes(str);
-    //     uint256[] memory chars = new uint256[](strBytes.length);
-
-    //     for (uint i = 0; i < strBytes.length; i++) {
-    //         // Convert each character to its character code (equivalent to charCodeAt)
-    //         chars[i] = uint256(uint8(strBytes[i]));
-    //     }
-
-    //     // Pad with null characters (value 0) up to maxLength if needed
-    //     uint256[] memory paddedChars;
-    //     if (chars.length < DEFAULT_STRING_LENGTH) {
-    //         paddedChars = new uint256[](DEFAULT_STRING_LENGTH);
-    //         for (uint i = 0; i < chars.length; i++) {
-    //             paddedChars[i] = chars[i];
-    //         }
-    //         // Rest are initialized to 0 (null character)
-    //     } else {
-    //         paddedChars = chars;
-    //     }
-
-    //     return paddedChars;
-    // }
-
-    // struct Character {
-    //     uint256 value;
-    // }
-
-    // struct CircuitString {
-    //     Character[DEFAULT_STRING_LENGTH] values;
-    // }
-
-    // Character[DEFAULT_STRING_LENGTH] public testLatestCharactedGenerated;
-    // uint256 public testLatestHash;
-
-    // function getTestLatestCharacter()
-    //     public
-    //     view
-    //     returns (Character[DEFAULT_STRING_LENGTH] memory)
-    // {
-    //     return testLatestCharactedGenerated;
-    // }
-
-    // // Main public interface - equivalent to CircuitString.fromString() in JS
-    // function fromString(string memory str) public {
-    //     bytes memory strBytes = bytes(str);
-    //     require(
-    //         strBytes.length <= DEFAULT_STRING_LENGTH,
-    //         "CircuitString.fromString: input string exceeds max length!"
-    //     );
-
-    //     // Create and fill the character array
-    //     Character[] memory chars = new Character[](DEFAULT_STRING_LENGTH);
-
-    //     // Fill with actual characters
-    //     for (uint i = 0; i < strBytes.length; i++) {
-    //         chars[i] = Character(uint256(uint8(strBytes[i])));
-    //         testLatestCharactedGenerated[i] = Character(
-    //             uint256(uint8(strBytes[i]))
-    //         );
-    //     }
-
-    //     // Fill remaining slots with null characters
-    //     for (uint i = strBytes.length; i < DEFAULT_STRING_LENGTH; i++) {
-    //         chars[i] = Character(0);
-    //         testLatestCharactedGenerated[i] = Character(0);
-    //     }
-    // }
-
-    // function hashCircuitString(
-    //     Character[DEFAULT_STRING_LENGTH] calldata input
-    // ) public {
-    //     uint256[] memory values = new uint256[](DEFAULT_STRING_LENGTH);
-    //     for (uint i = 0; i < input.length; i++) {
-    //         values[i] = input[i].value;
-    //     }
-
-    //     testLatestHash = hashPoseidon(values);
-    // }
-
-    // function hash(
-    //     uint256[DEFAULT_STRING_LENGTH] memory input
-    // ) public view returns (uint256) {
-    //     uint256[] memory values = new uint256[](DEFAULT_STRING_LENGTH);
-    //     for (uint i = 0; i < input.length; i++) {
-    //         values[i] = input[i];
-    //     }
-
-    //     return hashPoseidon(values);
-    // }
+        current.atStep = 3;
+    }
 
     /// @dev Equivalent to CircuitString.from(str).hash() from o1js
     /// @param str The message string.
@@ -475,5 +337,44 @@ contract PallasSignatureVerifier is
 
         uint256 charHash = hashPoseidon(charValues);
         return (charValues, charHash);
+    }
+
+    /// @dev PublicKey.toGroup()
+    /// @param compressed The pallas point in its compressed form. The default representation of PublicKey.
+    function defaultToGroup(
+        PointCompressed memory compressed
+    ) public pure returns (Point memory) {
+        uint256 _x = compressed.x; // x stays the same
+
+        // y² = x³ + 5
+        uint256 x2 = mulmod(_x, _x, FIELD_MODULUS);
+        uint256 x3 = mulmod(x2, _x, FIELD_MODULUS);
+        uint256 y2 = addmod(x3, B, FIELD_MODULUS); // B is 5 for Pallas
+
+        // Find square root
+        uint256 _y = sqrtmod(y2, FIELD_MODULUS);
+
+        // Check if we need to negate y based on isOdd
+        bool computedIsOdd = (_y % 2 == 1);
+        if (computedIsOdd != compressed.isOdd) {
+            _y = FIELD_MODULUS - _y; // Negate y
+        }
+
+        Point memory constructedPublicKey = Point({x: _x, y: _y});
+        return constructedPublicKey;
+    }
+
+    /// @dev PublicKey.fromGroup()
+    /// @param point Pallas point.
+    function groupToDefault(
+        Point memory point
+    ) public pure returns (PointCompressed memory) {
+        bool isOdd = (point.y % 2 == 1);
+
+        PointCompressed memory compressedPublicKey = PointCompressed({
+            x: point.x,
+            isOdd: isOdd
+        });
+        return compressedPublicKey;
     }
 }
