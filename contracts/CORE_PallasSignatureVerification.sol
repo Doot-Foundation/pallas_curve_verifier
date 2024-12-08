@@ -313,6 +313,55 @@ contract PallasSignatureVerifier is
         current.atStep = 3;
     }
 
+    function step_4_VM(uint256 vmId) external isValidVMId(vmId) {
+        VerifyMessageState storage current = vmLifeCycle[vmId];
+        if (current.atStep != 3) revert StepSkipped();
+
+        // Calculate s*G where G is generator point
+        Point memory G = Point(G_X, G_Y); // From PallasConstants
+        current.sG = scalarMul(G, current.signature.s);
+
+        current.atStep = 4;
+    }
+
+    function step_5_VM(uint256 vmId) external isValidVMId(vmId) {
+        VerifyMessageState storage current = vmLifeCycle[vmId];
+        if (current.atStep != 4) revert StepSkipped();
+
+        // Calculate e*pkInGroup where e is the message hash
+        current.ePk = scalarMul(current.pkInGroup, current.messageHash);
+
+        current.atStep = 5;
+    }
+
+    function step_6_VM(uint256 vmId) external isValidVMId(vmId) {
+        VerifyMessageState storage current = vmLifeCycle[vmId];
+        if (current.atStep != 5) revert StepSkipped();
+
+        // R = sG - ePk
+        current.R = addPoints(
+            current.sG,
+            Point(current.ePk.x, FIELD_MODULUS - current.ePk.y) // Negate ePk.y to subtract
+        );
+
+        current.atStep = 6;
+    }
+
+    function step_7_VM(uint256 vmId) external isValidVMId(vmId) returns (bool) {
+        VerifyMessageState storage current = vmLifeCycle[vmId];
+        if (current.atStep != 6) revert StepSkipped();
+
+        // Final verification:
+        // 1. Check R.x equals signature.r
+        // 2. Check R.y is even
+        current.isValid =
+            (current.R.x == current.signature.r) &&
+            isEven(current.R.y);
+        current.atStep = 7;
+
+        return current.isValid;
+    }
+
     /// @dev Equivalent to CircuitString.from(str).hash() from o1js
     /// @param str The message string.
     /// @return charValues Character representation of a message string. Equivalent to CircuitString.from(str).

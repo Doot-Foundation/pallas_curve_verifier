@@ -1,0 +1,35 @@
+Public Key Related:
+Point at infinity
+Points not on the Pallas curve
+Invalid coordinates (>= FIELD_MODULUS)
+Edge y-coordinates (testing isEven() cases)
+
+
+Signature Related:
+s value >= SCALAR_MODULUS
+r value >= FIELD_MODULUS
+Zero values for r or s
+Signature that verifies to invalid R point
+
+
+Message/Fields Related:
+Empty message/fields array
+Maximum length message (DEFAULT_STRING_LENGTH)
+Non-ASCII characters in message
+Fields with values >= FIELD_MODULUS
+
+
+Network/Prefix Related:
+Switching between mainnet/testnet prefixes
+Invalid prefix lengths
+
+
+Protocol Steps:
+Trying to skip steps (already handled by StepSkipped error)
+Trying to run same step twice
+Multiple users trying to access same verification ID
+
+
+Memory/Gas:
+Very large messages approaching gas limits
+Arrays approaching maximum sizes
