@@ -368,7 +368,7 @@ contract PallasSignatureVerifier is
     /// @return charHash The generated hash. Equivalent to hash over a Field[].
     function fromStringToHash(
         string memory str
-    ) internal view returns (uint256[] memory, uint256) {
+    ) public view returns (uint256[] memory, uint256) {
         bytes memory strBytes = bytes(str);
         require(
             strBytes.length <= DEFAULT_STRING_LENGTH,

@@ -25,4 +25,10 @@ contract PallasTypes {
         uint256 r; // x-coordinate of R
         uint256 s; // scalar value
     }
+
+    struct ProjectivePoint {
+        uint256 x;
+        uint256 y;
+        uint256 z;
+    }
 }

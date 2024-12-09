@@ -10,10 +10,12 @@ import "hardhat/console.sol";
  * @dev Implementation of Pallas curve operations
  */
 contract PallasCurve is PallasConstants, PallasTypes {
-    struct ProjectivePoint {
-        uint256 x;
-        uint256 y;
-        uint256 z;
+    function add(uint x, uint y, uint k) public pure returns (uint256) {
+        return addmod(x, y, k);
+    }
+
+    function mul(uint x, uint y, uint k) public pure returns (uint256) {
+        return mulmod(x, y, k);
     }
 
     /**
@@ -204,7 +206,7 @@ contract PallasCurve is PallasConstants, PallasTypes {
     function addPoints(
         Point memory p1,
         Point memory p2
-    ) internal pure returns (Point memory) {
+    ) public pure returns (Point memory) {
         ProjectivePoint memory g = toProjective(p1);
         ProjectivePoint memory h = toProjective(p2);
         ProjectivePoint memory r = projectiveAdd(g, h);
@@ -217,7 +219,7 @@ contract PallasCurve is PallasConstants, PallasTypes {
     function scalarMul(
         Point memory p,
         uint256 scalar
-    ) internal pure returns (Point memory) {
+    ) public pure returns (Point memory) {
         ProjectivePoint memory g = toProjective(p);
         ProjectivePoint memory result = ProjectivePoint(1, 1, 0);
         ProjectivePoint memory current = g;
@@ -237,7 +239,7 @@ contract PallasCurve is PallasConstants, PallasTypes {
     /**
      * @dev Check if point is on the Pallas curve: y² = x³ + 5
      */
-    function isOnCurve(Point memory p) internal pure returns (bool) {
+    function isOnCurve(Point memory p) public pure returns (bool) {
         if (p.x >= FIELD_MODULUS || p.y >= FIELD_MODULUS) {
             return false;
         }
@@ -255,7 +257,7 @@ contract PallasCurve is PallasConstants, PallasTypes {
      */
     function stringToFields(
         string calldata str
-    ) internal pure returns (uint256[] memory) {
+    ) public pure returns (uint256[] memory) {
         bytes memory strBytes = bytes(str);
         uint256 numFields = (strBytes.length + 31) / 32; // 32 bytes per field
         uint256[] memory fields = new uint256[](numFields);
@@ -277,7 +279,7 @@ contract PallasCurve is PallasConstants, PallasTypes {
     function bitsToFields(
         uint256[] memory words,
         uint256 totalBits
-    ) internal pure returns (uint256[] memory) {
+    ) public pure returns (uint256[] memory) {
         uint256 numFields = (totalBits + 254) / 255;
         uint256[] memory fields = new uint256[](numFields);
 
@@ -319,7 +321,7 @@ contract PallasCurve is PallasConstants, PallasTypes {
     /**
      * @dev Compute modular multiplicative inverse
      */
-    function invmod(uint256 a, uint256 m) internal pure returns (uint256) {
+    function invmod(uint256 a, uint256 m) public pure returns (uint256) {
         require(a != 0, "No inverse exists for 0");
 
         int256 t1;
@@ -392,7 +394,7 @@ contract PallasCurve is PallasConstants, PallasTypes {
         uint256 base,
         uint256 exponent,
         uint256 modulus
-    ) internal view returns (uint256 result) {
+    ) public view returns (uint256 result) {
         assembly {
             // Free memory pointer
             let p := mload(0x40)
@@ -416,7 +418,7 @@ contract PallasCurve is PallasConstants, PallasTypes {
         }
     }
 
-    function isEven(uint256 x) internal pure returns (bool) {
+    function isEven(uint256 x) public pure returns (bool) {
         return (x & 1) == 0;
     }
 }
