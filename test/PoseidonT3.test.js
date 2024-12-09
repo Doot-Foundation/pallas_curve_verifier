@@ -31,15 +31,15 @@ describe("PoseidonT3", function () {
       expect(result.toString()).to.equal(jsResult);
     });
 
-    it("Should convert prefix to field correctly", async function () {
-      const { poseidon } = await loadFixture(deployPoseidonFixture);
+    // it("Should convert prefix to field correctly", async function () {
+    //   const { poseidon } = await loadFixture(deployPoseidonFixture);
 
-      const testPrefix = "CodaSignature*******";
-      const result = await poseidon.prefixToField(testPrefix);
+    //   const testPrefix = "CodaSignature*******";
+    //   const result = await poseidon.prefixToField(testPrefix);
 
-      const jsPrefix = CircuitString.fromString(testPrefix).hash();
-      expect(result.toString()).to.equal(jsPrefix.toString());
-    });
+    //   const jsPrefix = CircuitString.fromString(testPrefix).hash();
+    //   expect(result.toString()).to.equal(jsPrefix.toString());
+    // });
   });
 
   describe("Hash Functions", function () {

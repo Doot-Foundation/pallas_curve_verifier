@@ -20,22 +20,27 @@ contract PoseidonT3 is PallasConstants {
     }
 
     /**
-     * @dev Poseidon permutation exactly matching o1js
+     * @dev Poseidon permutation exactly matching o1js.
      */
     function prefixToField(string memory prefix) public pure returns (uint256) {
         bytes memory prefixBytes = bytes(prefix);
         require(prefixBytes.length * 8 < 255, "prefix too long");
 
-        uint256 result = 0;
+        uint256 fieldSizeInBytes = 32;
+        require(prefixBytes.length < fieldSizeInBytes, "prefix too long");
 
+        // Convert each byte exactly as TextEncoder would
+        uint256 result = 0;
         for (uint i = 0; i < prefixBytes.length; i++) {
-            uint8 c = uint8(prefixBytes[i]);
-            require(c < 128, "only ASCII characters supported");
-            for (uint j = 0; j < 8; j++) {
-                result = (result << 1) | (c & 1);
-                c = c >> 1;
-            }
+            // TextEncoder produces bytes in big-endian order
+            result = (result << 8) | uint8(prefixBytes[i]);
         }
+
+        // Pad remaining bytes with zeros, matching Field.fromBytes behavior
+        uint256 remainingBits = (fieldSizeInBytes - prefixBytes.length) * 8;
+        result = result << remainingBits;
+
+        // Reduce modulo the Pallas base field, exactly as o1js does
         return result % FIELD_MODULUS;
     }
 

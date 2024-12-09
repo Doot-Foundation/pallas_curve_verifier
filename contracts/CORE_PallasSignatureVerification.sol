@@ -209,24 +209,14 @@ contract PallasSignatureVerifier is
             current.sG,
             Point(current.ePk.x, FIELD_MODULUS - current.ePk.y) // Negate ePk.y to subtract
         );
+        // Note: R is already in affine coordinates due to addPoints implementation
 
         current.atStep = 6;
     }
 
-    function step_7_VF(uint256 vfId) external isValidVFId(vfId) {
+    function step_7_VF(uint256 vfId) external isValidVFId(vfId) returns (bool) {
         VerifyFieldsState storage current = vfLifeCycle[vfId];
         if (current.atStep != 6) revert StepSkipped();
-
-        // No additional computation needed as we're already in affine
-        // In the JS version, this is where R gets converted from projective to affine
-        // But our addPoints already returns affine coordinates
-
-        current.atStep = 7;
-    }
-
-    function step_8_VF(uint256 vfId) external isValidVFId(vfId) returns (bool) {
-        VerifyFieldsState storage current = vfLifeCycle[vfId];
-        if (current.atStep != 7) revert StepSkipped();
 
         // Final verification:
         // 1. Check R.x equals signature.r
@@ -234,7 +224,7 @@ contract PallasSignatureVerifier is
         current.isValid =
             (current.R.x == current.signature.r) &&
             isEven(current.R.y);
-        current.atStep = 8;
+        current.atStep = 7;
 
         return current.isValid;
     }
