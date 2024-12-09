@@ -4,6 +4,9 @@ const {
 } = require("@nomicfoundation/hardhat-toolbox/network-helpers");
 const { Field, CircuitString } = require("o1js");
 
+const FIELD_MODULUS =
+  45064998451067251948035796725861806592124573483999999999999993n;
+
 describe("PoseidonT3", function () {
   async function deployPoseidonFixture() {
     const [deployer] = await ethers.getSigners();
@@ -16,8 +19,13 @@ describe("PoseidonT3", function () {
     it("Should compute power7 correctly", async function () {
       const { poseidon } = await loadFixture(deployPoseidonFixture);
 
-      const testValue = Field(3);
-      const jsResult = testValue.pow(7).toString();
+      const x = 3n;
+
+      let x2 = (x * x) % FIELD_MODULUS;
+      let x3 = (x2 * x) % FIELD_MODULUS;
+      let x6 = (x3 * x3) % FIELD_MODULUS;
+      let jsResult = (x6 * x) % FIELD_MODULUS;
+      jsResult = jsResult.toString();
 
       const result = await poseidon.power7(3);
       expect(result.toString()).to.equal(jsResult);

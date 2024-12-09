@@ -318,35 +318,13 @@ contract PallasCurve is PallasConstants, PallasTypes {
         return fields;
     }
 
-    /**
-     * @dev Compute modular multiplicative inverse
-     */
-    function invmod(uint256 a, uint256 m) public pure returns (uint256) {
-        require(a != 0, "No inverse exists for 0");
-
-        int256 t1;
-        int256 t2 = 1;
-        uint256 r1 = m;
-        uint256 r2 = a;
-        uint256 q;
-
-        while (r2 != 0) {
-            q = r1 / r2;
-            (t1, t2) = (t2, t1 - int256(q) * t2);
-            (r1, r2) = (r2, r1 - q * r2);
-        }
-
-        if (t1 < 0) t1 += int256(m);
-        return uint256(t1);
-    }
-
     uint256 internal constant WINDOW_SIZE = 4;
     uint256 internal constant WINDOW_MASK = (1 << WINDOW_SIZE) - 1;
 
     /**
      * @dev Modular multiplicative inverse
      */
-    function invmod(uint256 a) internal pure returns (uint256) {
+    function invmod(uint256 a) public pure returns (uint256) {
         require(a != 0, "Cannot invert 0");
 
         int256 t = 0;
@@ -365,29 +343,49 @@ contract PallasCurve is PallasConstants, PallasTypes {
         return uint256(t);
     }
 
-    function sqrtmod(uint256 a, uint256 p) public pure returns (uint256) {
-        require(p % 4 == 3, "Only implemented for p = 3 mod 4"); // Pallas modulus satisfies this
+    function sqrtmod(uint256 n, uint256 p) public view returns (uint256) {
+        if (n == 0) return 0;
 
-        // For p = 3 mod 4, sqrt(a) = a^((p+1)/4) mod p
-        uint256 exponent = (p + 1) / 4;
-
-        // Compute modular exponentiation
-        uint256 result = mulmod(1, a, p); // Initialize
-        uint256 base = a;
-
-        while (exponent > 0) {
-            if (exponent % 2 == 1) {
-                result = mulmod(result, base, p);
-            }
-            base = mulmod(base, base, p);
-            exponent = exponent / 2;
+        // Calculate Q and M where p - 1 = Q * 2^M and Q is odd
+        uint256 Q = p - 1;
+        uint256 M = 0;
+        while (Q % 2 == 0) {
+            Q /= 2;
+            M++;
         }
 
-        // Verify result
-        uint256 check = mulmod(result, result, p);
-        require(check == a, "Square root does not exist");
+        // Find a non-residue z
+        uint256 z = 2;
+        while (true) {
+            if (modExp(z, (p - 1) / 2, p) == p - 1) break; // Found a non-residue
+            z++;
+        }
 
-        return result;
+        uint256 c = modExp(z, Q, p);
+        uint256 t = modExp(n, Q >> 1, p); // n^((Q-1)/2)
+        uint256 R = mulmod(t, n, p); // n^((Q+1)/2)
+        t = mulmod(t, R, p); // n^Q
+
+        while (t != 1) {
+            uint256 i = 0;
+            uint256 s = t;
+            while (s != 1 && i < M) {
+                s = mulmod(s, s, p);
+                i++;
+            }
+            require(i < M, "Square root does not exist");
+
+            uint256 b = c;
+            for (uint256 j = 0; j < M - i - 1; j++) {
+                b = mulmod(b, b, p);
+            }
+            M = i;
+            c = mulmod(b, b, p);
+            t = mulmod(t, c, p);
+            R = mulmod(R, b, p);
+        }
+
+        return R;
     }
 
     function modExp(

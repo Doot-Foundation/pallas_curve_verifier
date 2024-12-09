@@ -5,7 +5,7 @@ const {
 const { PrivateKey } = require("o1js");
 
 const FIELD_MODULUS =
-  28948022309329048855892746252171976963363056481941560715954676764349967630337n;
+  45064998451067251948035796725861806592124573483999999999999993n;
 
 describe("PallasSignatureVerifier", function () {
   async function deployVerifierFixture() {
@@ -42,6 +42,23 @@ describe("PallasSignatureVerifier", function () {
   });
 
   describe("Point Conversion", function () {
+    it("Should compress/decompress points identically to o1js", async function () {
+      const { verifier } = await loadFixture(deployVerifierFixture);
+
+      const privateKey = PrivateKey.random();
+      const defaultPoint = privateKey.toPublicKey();
+      const point = defaultPoint.toGroup();
+
+      // Pass individual parameters
+      const decompressed = await verifier.defaultToGroup(
+        BigInt(defaultPoint.x.toString()),
+        defaultPoint.isOdd.toBoolean()
+      );
+
+      expect(decompressed[0].toString()).to.equal(point.x.toString());
+      expect(decompressed[1].toString()).to.equal(point.y.toString());
+    });
+
     it("Should correctly convert between group formats", async function () {
       const { verifier } = await loadFixture(deployVerifierFixture);
 
@@ -51,11 +68,16 @@ describe("PallasSignatureVerifier", function () {
         y: BigInt(key.toGroup().y.toString()),
       };
 
-      const compressed = await verifier.groupToDefault(point);
-      const decompressed = await verifier.defaultToGroup(compressed);
+      // Get back [x, isOdd]
+      const [compressedX, isOdd] = await verifier.groupToDefault(
+        point.x,
+        point.y
+      );
 
-      expect(decompressed.x.toString()).to.equal(point.x.toString());
-      expect(decompressed.y.toString()).to.equal(point.y.toString());
+      const decompressed = await verifier.defaultToGroup(compressedX, isOdd);
+
+      expect(decompressed[0].toString()).to.equal(point.x.toString());
+      expect(decompressed[1].toString()).to.equal(point.y.toString());
     });
   });
 
@@ -147,50 +169,6 @@ describe("PallasSignatureVerifier", function () {
       };
 
       expect(await verifier.isValidPublicKey(invalidPoint)).to.be.false;
-    });
-  });
-
-  describe("Group Point Conversion", function () {
-    it("Should match o1js toGroup conversion", async function () {
-      const { verifier } = await loadFixture(deployVerifierFixture);
-
-      // Get point from o1js
-      const privateKey = PrivateKey.random();
-      const publicKey = privateKey.toPublicKey();
-      const groupPoint = publicKey.toGroup();
-
-      // Convert using our contract
-      const compressed = {
-        x: BigInt(publicKey.x.toString()),
-        isOdd: publicKey.isOdd.toBoolean(),
-      };
-
-      const point = await verifier.defaultToGroup(compressed);
-
-      // Should match o1js conversion
-      expect(point.x.toString()).to.equal(groupPoint.x.toString());
-      expect(point.y.toString()).to.equal(groupPoint.y.toString());
-    });
-
-    it("Should compress/decompress points identically to o1js", async function () {
-      const { verifier } = await loadFixture(deployVerifierFixture);
-
-      // Start with random point
-      const privateKey = PrivateKey.random();
-      const point = privateKey.toPublicKey().toGroup();
-
-      const p = {
-        x: BigInt(point.x.toString()),
-        y: BigInt(point.y.toString()),
-      };
-
-      // Compress then decompress
-      const compressed = await verifier.groupToDefault(p);
-      const decompressed = await verifier.defaultToGroup(compressed);
-
-      // Should match original
-      expect(decompressed.x.toString()).to.equal(p.x.toString());
-      expect(decompressed.y.toString()).to.equal(p.y.toString());
     });
   });
 });

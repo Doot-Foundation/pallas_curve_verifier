@@ -177,7 +177,7 @@ contract PallasSignatureVerifier is
         });
 
         // Convert to group point
-        current.pkInGroup = defaultToGroup(compressed);
+        current.pkInGroup = _defaultToGroup(compressed);
         current.atStep = 3;
     }
 
@@ -308,7 +308,7 @@ contract PallasSignatureVerifier is
         });
 
         // Convert to group point
-        current.pkInGroup = defaultToGroup(compressed);
+        current.pkInGroup = _defaultToGroup(compressed);
 
         current.atStep = 3;
     }
@@ -388,11 +388,28 @@ contract PallasSignatureVerifier is
         return (charValues, charHash);
     }
 
-    /// @dev PublicKey.toGroup()
-    /// @param compressed The pallas point in its compressed form. The default representation of PublicKey.
+    function groupToDefault(
+        uint256 pointX,
+        uint256 pointY
+    ) public pure returns (uint256, bool) {
+        // Just return a tuple without names
+        bool isOdd = (pointY % 2 == 1);
+        return (pointX, isOdd);
+    }
+
     function defaultToGroup(
+        uint256 pointX,
+        bool isOdd
+    ) external view returns (uint256[2] memory) {
+        Point memory point = _defaultToGroup(
+            PointCompressed({x: pointX, isOdd: isOdd})
+        );
+        return [point.x, point.y];
+    }
+
+    function _defaultToGroup(
         PointCompressed memory compressed
-    ) public pure returns (Point memory) {
+    ) internal view returns (Point memory) {
         uint256 _x = compressed.x; // x stays the same
 
         // y² = x³ + 5
@@ -409,21 +426,15 @@ contract PallasSignatureVerifier is
             _y = FIELD_MODULUS - _y; // Negate y
         }
 
-        Point memory constructedPublicKey = Point({x: _x, y: _y});
-        return constructedPublicKey;
+        return Point({x: _x, y: _y});
     }
 
-    /// @dev PublicKey.fromGroup()
-    /// @param point Pallas point.
-    function groupToDefault(
-        Point memory point
-    ) public pure returns (PointCompressed memory) {
-        bool isOdd = (point.y % 2 == 1);
-
-        PointCompressed memory compressedPublicKey = PointCompressed({
-            x: point.x,
-            isOdd: isOdd
-        });
-        return compressedPublicKey;
-    }
+    // function groupToDefault(
+    //     uint256 x,
+    //     uint256 y
+    // ) public pure returns (uint256 x_, bool isOdd) {
+    //     // Return named tuple instead of array
+    //     isOdd = (y % 2 == 1);
+    //     x_ = x;
+    // }
 }
