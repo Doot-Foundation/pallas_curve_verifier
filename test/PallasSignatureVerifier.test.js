@@ -2,7 +2,8 @@ const { expect } = require("chai");
 const {
   loadFixture,
 } = require("@nomicfoundation/hardhat-toolbox/network-helpers");
-const { PrivateKey } = require("o1js");
+const { Signature, PrivateKey, PublicKey } = require("o1js");
+const { Client } = require("mina-signer");
 
 const FIELD_MODULUS =
   45064998451067251948035796725861806592124573483999999999999993n;
@@ -169,6 +170,183 @@ describe("PallasSignatureVerifier", function () {
       };
 
       expect(await verifier.isValidPublicKey(invalidPoint)).to.be.false;
+    });
+  });
+
+  // describe("Message Signature Verification", function () {
+  //   async function deployAndSetupMessage() {
+  //     // Deploy
+  //     const [deployer] = await ethers.getSigners();
+  //     const verifier = await ethers.deployContract("PallasSignatureVerifier");
+
+  //     // Setup mina-signer
+  //     const client = new Client({ network: "testnet" });
+  //     const keypair = client.genKeys();
+  //     const message = "Test message for verification";
+
+  //     // Get signed message
+  //     const signedMessage = client.signMessage(message, keypair.privateKey);
+
+  //     return { verifier, signedMessage, keypair };
+  //   }
+
+  //   it("Should verify message signature through all steps", async function () {
+  //     const { verifier, signedMessage, keypair } = await loadFixture(
+  //       deployAndSetupMessage
+  //     );
+
+  //     // Start verification steps
+  //     const vmId = await verifier.step_0_VM_assignValues(
+  //       { r: signedMessage.signature.field, s: signedMessage.signature.scalar },
+  //       { x: signedMessage.publicKey.x, y: signedMessage.publicKey.y },
+  //       signedMessage.data
+  //     );
+
+  //     await verifier.step_1_VM(vmId);
+  //     await verifier.step_2_VM(vmId);
+  //     await verifier.step_3_VM(vmId);
+  //     await verifier.step_4_VM(vmId);
+  //     await verifier.step_5_VM(vmId);
+  //     await verifier.step_6_VM(vmId);
+  //     const isValid = await verifier.step_7_VM(vmId);
+
+  //     expect(isValid).to.be.true;
+  //   });
+  // });
+
+  describe("Fields Signature Verification", function () {
+    async function deployAndSetupFields() {
+      const { verifier } = await loadFixture(deployVerifierFixture);
+
+      // Setup mina-signer
+      const client = new Client({ network: "mainnet" });
+
+      // const keypair = client.genKeys();
+      const keypair = {
+        privateKey: "EKEEa7Kzjh5ttuSzyjWZF9NEtZrQpsC3taNwKfi8U1nud3MwKvNs",
+        publicKey: "B62qj2vSpa1MEXNPZAkLdEzQdRS9iE8NhhRfpqLCAvW6QCPi8fxAYnM",
+      };
+
+      const fields = [
+        123456989n,
+        987654321n,
+        23452344n,
+        3465346n,
+        21342321341534n,
+      ];
+      const signedFields = client.signFields(fields, keypair.privateKey);
+
+      const altFields = [654n, 65n];
+      const altSignedFields = client.signFields(altFields, keypair.privateKey);
+
+      return { verifier, signedFields, altSignedFields, keypair, client };
+    }
+
+    it("Should verify signature through all steps in case valid.", async function () {
+      const { verifier, signedFields, client } = await loadFixture(
+        deployAndSetupFields
+      );
+
+      const signatureObject = Signature.fromBase58(signedFields.signature);
+      const s = signatureObject.s.toBigInt();
+      const r = signatureObject.r.toBigInt();
+
+      const signer = PublicKey.fromBase58(signedFields.publicKey);
+      const signerFull = signer.toGroup();
+
+      const result = client.verifyFields({
+        data: signedFields.data,
+        signature: signedFields.signature,
+        publicKey: signedFields.publicKey,
+      });
+
+      // Start verification steps
+      const vfId = 0;
+
+      let txn;
+      txn = await verifier.step_0_VF_assignValues(
+        { x: signerFull.x.toString(), y: signerFull.y.toString() },
+        { r: r, s: s },
+        signedFields.data,
+        false // testnet
+      );
+
+      await txn.wait();
+
+      txn = await verifier.step_1_VF(vfId);
+      await txn.wait();
+
+      txn = await verifier.step_2_VF(vfId);
+      await txn.wait();
+
+      txn = await verifier.step_3_VF(vfId);
+      await txn.wait();
+
+      txn = await verifier.step_4_VF(vfId);
+      await txn.wait();
+
+      txn = await verifier.step_5_VF(vfId);
+      await txn.wait();
+
+      txn = await verifier.step_6_VF(vfId);
+      await txn.wait();
+
+      const finalObject = await verifier.getVFState(vfId);
+
+      expect(finalObject[12]).to.equal(result);
+    });
+    it("Should return isValid=false in case invalid.", async function () {
+      const { verifier, signedFields, altSignedFields, client } =
+        await loadFixture(deployAndSetupFields);
+
+      const signatureObject = Signature.fromBase58(altSignedFields.signature);
+      const s = signatureObject.s.toBigInt();
+      const r = signatureObject.r.toBigInt();
+
+      const signer = PublicKey.fromBase58(signedFields.publicKey);
+      const signerFull = signer.toGroup();
+
+      const result = client.verifyFields({
+        data: signedFields.data,
+        signature: altSignedFields.signature,
+        publicKey: signedFields.publicKey,
+      });
+
+      // Start verification steps
+      const vfId = 0;
+
+      let txn;
+      txn = await verifier.step_0_VF_assignValues(
+        { x: signerFull.x.toString(), y: signerFull.y.toString() },
+        { r: r, s: s },
+        signedFields.data,
+        false
+      );
+
+      await txn.wait();
+
+      txn = await verifier.step_1_VF(vfId);
+      await txn.wait();
+
+      txn = await verifier.step_2_VF(vfId);
+      await txn.wait();
+
+      txn = await verifier.step_3_VF(vfId);
+      await txn.wait();
+
+      txn = await verifier.step_4_VF(vfId);
+      await txn.wait();
+
+      txn = await verifier.step_5_VF(vfId);
+      await txn.wait();
+
+      txn = await verifier.step_6_VF(vfId);
+      await txn.wait();
+
+      const finalObject = await verifier.getVFState(vfId);
+
+      expect(finalObject[12]).to.equal(false);
+      expect(finalObject[12]).to.equal(result);
     });
   });
 });

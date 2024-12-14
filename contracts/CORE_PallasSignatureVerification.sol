@@ -138,37 +138,42 @@ contract PallasSignatureVerifier is
         toPush.publicKey = _publicKey;
         toPush.signature = _signature;
         toPush.fields = _fields;
+        toPush.prefix = "CodaSignature*******";
 
         vfLifeCycleCreator[toSetId] = msg.sender;
 
         return toSetId;
     }
 
+    /// ==================================================
+    /// hashMessage(message, pk, r, networkId)
+    /// ==================================================
+    /// message : { fields: data }
+    /// pk : PublicKey in Group representation : {x,y}
+    /// r : Field from Signature
+    /// networkId is fixed to 'testnet'
+    /// @param vfId id
     function step_1_VF(uint256 vfId) external isValidVFId(vfId) {
         VerifyFieldsState storage current = vfLifeCycle[vfId];
         if (current.atStep != 0) revert StepSkipped();
 
-        // Store actual string prefix
-        current.prefix = current.mainnet
-            ? "MinaSignatureMainnet"
-            : "CodaSignature*******";
+        //let input = HashInput.append(message, { fields: [x, y, r] });
+        uint256[] memory message = current.fields;
+        uint256[] memory fullInput = new uint256[](message.length + 3);
+        for (uint i = 0; i < message.length; i++) {
+            fullInput[i] = message[i];
+        }
+        fullInput[message.length] = current.publicKey.x;
+        fullInput[message.length + 1] = current.publicKey.y;
+        fullInput[message.length + 2] = current.signature.r;
 
+        current.messageHash = poseidonHashWithPrefix(current.prefix, fullInput);
         current.atStep = 1;
     }
 
     function step_2_VF(uint256 vfId) external isValidVFId(vfId) {
         VerifyFieldsState storage current = vfLifeCycle[vfId];
         if (current.atStep != 1) revert StepSkipped();
-
-        uint256[] memory input = current.fields;
-        // Now passing string prefix directly
-        current.messageHash = hashPoseidonWithPrefix(current.prefix, input);
-        current.atStep = 2;
-    }
-
-    function step_3_VF(uint256 vfId) external isValidVFId(vfId) {
-        VerifyFieldsState storage current = vfLifeCycle[vfId];
-        if (current.atStep != 2) revert StepSkipped();
 
         // Create compressed point format from public key
         PointCompressed memory compressed = PointCompressed({
@@ -178,6 +183,18 @@ contract PallasSignatureVerifier is
 
         // Convert to group point
         current.pkInGroup = _defaultToGroup(compressed);
+        current.atStep = 2;
+    }
+
+    function step_3_VF(uint256 vfId) external isValidVFId(vfId) {
+        VerifyFieldsState storage current = vfLifeCycle[vfId];
+        if (current.atStep != 2) revert StepSkipped();
+
+        // Calculate s*G where G is generator point
+        Point memory G = Point(G_X, G_Y);
+
+        current.sG = scalarMul(G, current.signature.s);
+
         current.atStep = 3;
     }
 
@@ -185,24 +202,14 @@ contract PallasSignatureVerifier is
         VerifyFieldsState storage current = vfLifeCycle[vfId];
         if (current.atStep != 3) revert StepSkipped();
 
-        // Calculate s*G where G is generator point
-        Point memory G = Point(G_X, G_Y); // From PallasConstants
-        current.sG = scalarMul(G, current.signature.s);
+        // Calculate e*pkInGroup where e is the message hash
+        current.ePk = scalarMul(current.pkInGroup, current.messageHash);
         current.atStep = 4;
     }
 
     function step_5_VF(uint256 vfId) external isValidVFId(vfId) {
         VerifyFieldsState storage current = vfLifeCycle[vfId];
         if (current.atStep != 4) revert StepSkipped();
-
-        // Calculate e*pkInGroup where e is the message hash
-        current.ePk = scalarMul(current.pkInGroup, current.messageHash);
-        current.atStep = 5;
-    }
-
-    function step_6_VF(uint256 vfId) external isValidVFId(vfId) {
-        VerifyFieldsState storage current = vfLifeCycle[vfId];
-        if (current.atStep != 5) revert StepSkipped();
 
         // R = sG - ePk
         current.R = addPoints(
@@ -211,12 +218,12 @@ contract PallasSignatureVerifier is
         );
         // Note: R is already in affine coordinates due to addPoints implementation
 
-        current.atStep = 6;
+        current.atStep = 5;
     }
 
-    function step_7_VF(uint256 vfId) external isValidVFId(vfId) returns (bool) {
+    function step_6_VF(uint256 vfId) external isValidVFId(vfId) returns (bool) {
         VerifyFieldsState storage current = vfLifeCycle[vfId];
-        if (current.atStep != 6) revert StepSkipped();
+        if (current.atStep != 5) revert StepSkipped();
 
         // Final verification:
         // 1. Check R.x equals signature.r
@@ -224,7 +231,7 @@ contract PallasSignatureVerifier is
         current.isValid =
             (current.R.x == current.signature.r) &&
             isEven(current.R.y);
-        current.atStep = 7;
+        current.atStep = 6;
 
         return current.isValid;
     }
@@ -279,7 +286,7 @@ contract PallasSignatureVerifier is
             : "CodaSignature*******";
 
         // Hash with prefix
-        current.messageHash = hashPoseidonWithPrefix(
+        current.messageHash = poseidonHashWithPrefix(
             prefix,
             current.charValues
         );
@@ -374,7 +381,7 @@ contract PallasSignatureVerifier is
             charValues[i] = 0;
         }
 
-        uint256 charHash = hashPoseidon(charValues);
+        uint256 charHash = poseidonHash(charValues);
         return (charValues, charHash);
     }
 

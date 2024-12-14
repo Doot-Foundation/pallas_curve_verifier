@@ -19,28 +19,35 @@ contract PoseidonT3 is PallasConstants {
         return mulmod(x6, x, FIELD_MODULUS);
     }
 
-    /**
-     * @dev Poseidon permutation exactly matching o1js.
-     */
     function prefixToField(string memory prefix) public pure returns (uint256) {
         bytes memory prefixBytes = bytes(prefix);
-        require(prefixBytes.length * 8 < 255, "prefix too long");
+        require(prefixBytes.length < 32, "prefix too long");
 
-        uint256 fieldSizeInBytes = 32;
-        require(prefixBytes.length < fieldSizeInBytes, "prefix too long");
-
-        // Convert each byte exactly as TextEncoder would
         uint256 result = 0;
-        for (uint i = 0; i < prefixBytes.length; i++) {
-            // TextEncoder produces bytes in big-endian order
-            result = (result << 8) | uint8(prefixBytes[i]);
+        // Process in little-endian order (like o1js)
+        for (uint i = 0; i < 32; i++) {
+            if (i < prefixBytes.length) {
+                result |= uint256(uint8(prefixBytes[i])) << (i * 8);
+            }
         }
 
-        // Pad remaining bytes with zeros, matching Field.fromBytes behavior
-        uint256 remainingBits = (fieldSizeInBytes - prefixBytes.length) * 8;
-        result = result << remainingBits;
+        return result % FIELD_MODULUS;
+    }
 
-        // Reduce modulo the Pallas base field, exactly as o1js does
+    function stringToField(string memory str) public pure returns (uint256) {
+        bytes memory strBytes = bytes(str);
+        require(strBytes.length < 32, "prefix too long");
+
+        uint256 result = 0;
+        // Process in little-endian order (like o1js)
+        for (uint i = 0; i < 32; i++) {
+            if (i < strBytes.length) {
+                result |= uint256(uint8(strBytes[i])) << (i * 8);
+            }
+            // zeros are handled implicitly
+        }
+
+        console.log(result % FIELD_MODULUS);
         return result % FIELD_MODULUS;
     }
 
@@ -152,10 +159,7 @@ contract PoseidonT3 is PallasConstants {
         return state;
     }
 
-    /**
-     * @dev Hash with prefix exactly as in o1js
-     */
-    function hashPoseidonWithPrefix(
+    function poseidonHashWithPrefix(
         string memory prefix,
         uint256[] memory input
     ) public view returns (uint256) {
@@ -169,7 +173,7 @@ contract PoseidonT3 is PallasConstants {
         return state[0];
     }
 
-    function hashPoseidon(
+    function poseidonHash(
         uint256[] memory input
     ) public view returns (uint256) {
         uint256[3] memory state = initialState();

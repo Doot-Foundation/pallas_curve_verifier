@@ -16,14 +16,9 @@ contract PallasTypes {
         bool isOdd;
     }
 
-    struct SignatureJSON {
-        uint256 field;
-        uint256 scalar;
-    }
-
     struct Signature {
-        uint256 r; // x-coordinate of R
-        uint256 s; // scalar value
+        uint256 r;
+        uint256 s;
     }
 
     struct ProjectivePoint {

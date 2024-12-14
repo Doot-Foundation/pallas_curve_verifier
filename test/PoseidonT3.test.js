@@ -30,16 +30,6 @@ describe("PoseidonT3", function () {
       const result = await poseidon.power7(3);
       expect(result.toString()).to.equal(jsResult);
     });
-
-    // it("Should convert prefix to field correctly", async function () {
-    //   const { poseidon } = await loadFixture(deployPoseidonFixture);
-
-    //   const testPrefix = "CodaSignature*******";
-    //   const result = await poseidon.prefixToField(testPrefix);
-
-    //   const jsPrefix = CircuitString.fromString(testPrefix).hash();
-    //   expect(result.toString()).to.equal(jsPrefix.toString());
-    // });
   });
 
   describe("Hash Functions", function () {
@@ -47,7 +37,7 @@ describe("PoseidonT3", function () {
       const { poseidon } = await loadFixture(deployPoseidonFixture);
 
       const input = [Field(1), Field(2)].map((f) => BigInt(f.toString()));
-      const result = await poseidon.hashPoseidon(input);
+      const result = await poseidon.poseidonHash(input);
       expect(result.toString()).to.not.equal("0");
     });
 
@@ -56,7 +46,7 @@ describe("PoseidonT3", function () {
 
       const prefix = "CodaSignature*******";
       const input = [Field(1), Field(2)].map((f) => BigInt(f.toString()));
-      const result = await poseidon.hashPoseidonWithPrefix(prefix, input);
+      const result = await poseidon.poseidonHashWithPrefix(prefix, input);
       expect(result.toString()).to.not.equal("0");
     });
   });

@@ -16,7 +16,7 @@ contract PallasConstants {
     // Generator point from o1js
     uint256 public constant G_X = 1;
     uint256 public constant G_Y =
-        0x1B7503CCB85A38D6E4987952E639FAE2935AA52872E93B049A62A8B62447640B;
+        0x1b74b5a30a12937c53dfa9f06378ee548f655bd4333d477119cf7a23caed2abb;
 
     // Poseidon parameters matching poseidonParamsKimchiFp
     uint256 public constant POSEIDON_FULL_ROUNDS = 55;

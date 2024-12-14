@@ -224,7 +224,7 @@ contract PallasCurve is PallasConstants, PallasTypes {
         ProjectivePoint memory result = ProjectivePoint(1, 1, 0);
         ProjectivePoint memory current = g;
 
-        scalar = scalar % SCALAR_MODULUS;
+        // scalar = scalar % SCALAR_MODULUS;
         while (scalar > 0) {
             if (scalar & 1 == 1) {
                 result = projectiveAdd(result, current);
