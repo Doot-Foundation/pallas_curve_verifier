@@ -12,20 +12,20 @@ error StepSkipped();
  */
 
 contract PallasFieldsSignatureVerifier is Poseidon {
-    struct VerifyMessageState {
-        uint8 atStep;
-        bool mainnet; // Added for network type
-        Point publicKey;
-        Signature signature;
-        string message;
-        string prefix; // Stored prefix as field element (step 1)
-        uint256 messageHash; // For storing the computed hash
-        Point pkInGroup; // Public key in group form
-        Point sG; // s*G computation
-        Point ePk; // e*pkInGroup computation
-        Point R; // Final point
-        bool isValid; // Final result
-    }
+    // struct VerifyMessageState {
+    //     uint8 atStep;
+    //     bool mainnet; // Added for network type
+    //     Point publicKey;
+    //     Signature signature;
+    //     string message;
+    //     string prefix; // Stored prefix as field element (step 1)
+    //     uint256 messageHash; // For storing the computed hash
+    //     Point pkInGroup; // Public key in group form
+    //     Point sG; // s*G computation
+    //     Point ePk; // e*pkInGroup computation
+    //     Point R; // Final point
+    //     bool isValid; // Final result
+    // }
 
     struct VerifyFieldsState {
         bool init; // To track if state was initialized
@@ -44,18 +44,18 @@ contract PallasFieldsSignatureVerifier is Poseidon {
         bool isValid; // Final verification result
     }
 
-    uint256 public vmCounter = 0;
-    mapping(uint256 => address) public vmLifeCycleCreator;
-    mapping(uint256 => VerifyMessageState) public vmLifeCycle;
+    // uint256 public vmCounter = 0;
+    // mapping(uint256 => address) public vmLifeCycleCreator;
+    // mapping(uint256 => VerifyMessageState) public vmLifeCycle;
 
     uint256 public vfCounter = 0;
     mapping(uint256 => address) public vfLifeCycleCreator;
     mapping(uint256 => VerifyFieldsState) public vfLifeCycle;
 
-    modifier isVMCreator(uint256 id) {
-        require(msg.sender == vmLifeCycleCreator[id]);
-        _;
-    }
+    // modifier isVMCreator(uint256 id) {
+    //     require(msg.sender == vmLifeCycleCreator[id]);
+    //     _;
+    // }
     modifier isVFCreator(uint256 id) {
         require(msg.sender == vfLifeCycleCreator[id]);
         _;
@@ -64,25 +64,26 @@ contract PallasFieldsSignatureVerifier is Poseidon {
         require(id < vfCounter);
         _;
     }
-    modifier isValidVMId(uint256 id) {
-        require(id < vmCounter);
-        _;
-    }
 
-    function cleanupVMLifecycle(uint256 vmId) external isVMCreator(vmId) {
-        delete vmLifeCycle[vmId];
-    }
+    // modifier isValidVMId(uint256 id) {
+    //     require(id < vmCounter);
+    //     _;
+    // }
+
+    // function cleanupVMLifecycle(uint256 vmId) external isVMCreator(vmId) {
+    //     delete vmLifeCycle[vmId];
+    // }
 
     function cleanupVFLifecycle(uint256 vfId) external isVFCreator(vfId) {
-        delete vmLifeCycle[vfId];
+        delete vfLifeCycle[vfId];
     }
 
-    function getVMState(
-        uint256 vmId
-    ) external view returns (VerifyMessageState memory state) {
-        VerifyMessageState storage returnedState = vmLifeCycle[vmId];
-        return returnedState;
-    }
+    // function getVMState(
+    //     uint256 vmId
+    // ) external view returns (VerifyMessageState memory state) {
+    //     VerifyMessageState storage returnedState = vmLifeCycle[vmId];
+    //     return returnedState;
+    // }
 
     function getVFState(
         uint256 vfId
@@ -244,117 +245,117 @@ contract PallasFieldsSignatureVerifier is Poseidon {
         return current.isValid;
     }
 
-    /// @dev verifyMessage()
-    /// @param _signature The associated signature.
-    /// @param _publicKey The public key.
-    /// @param _message The string message
-    /// @param _network Mainnet or testnet
-    function step_0_VM_assignValues(
-        Point calldata _publicKey,
-        Signature calldata _signature,
-        string calldata _message,
-        bool _network
-    ) external returns (uint256) {
-        if (!isValidPublicKey(_publicKey)) revert InvalidPublicKey();
+    // /// @dev verifyMessage()
+    // /// @param _signature The associated signature.
+    // /// @param _publicKey The public key.
+    // /// @param _message The string message
+    // /// @param _network Mainnet or testnet
+    // function step_0_VM_assignValues(
+    //     Point calldata _publicKey,
+    //     Signature calldata _signature,
+    //     string calldata _message,
+    //     bool _network
+    // ) external returns (uint256) {
+    //     if (!isValidPublicKey(_publicKey)) revert InvalidPublicKey();
 
-        uint256 toSetId = vmCounter;
-        ++vmCounter;
+    //     uint256 toSetId = vmCounter;
+    //     ++vmCounter;
 
-        VerifyMessageState storage toPush = vmLifeCycle[toSetId];
-        toPush.atStep = 0;
-        toPush.publicKey = _publicKey;
-        toPush.signature = _signature;
-        toPush.message = _message;
-        toPush.mainnet = _network;
+    //     VerifyMessageState storage toPush = vmLifeCycle[toSetId];
+    //     toPush.atStep = 0;
+    //     toPush.publicKey = _publicKey;
+    //     toPush.signature = _signature;
+    //     toPush.message = _message;
+    //     toPush.mainnet = _network;
 
-        toPush.prefix = _network
-            ? "MinaSignatureMainnet"
-            : "CodaSignature*******";
+    //     toPush.prefix = _network
+    //         ? "MinaSignatureMainnet"
+    //         : "CodaSignature*******";
 
-        vmLifeCycleCreator[toSetId] = msg.sender;
+    //     vmLifeCycleCreator[toSetId] = msg.sender;
 
-        return toSetId;
-    }
+    //     return toSetId;
+    // }
 
-    function step_1_VM(uint256 vmId) external isValidVMId(vmId) {
-        VerifyMessageState storage current = vmLifeCycle[vmId];
-        if (current.atStep != 0) revert StepSkipped();
+    // function step_1_VM(uint256 vmId) external isValidVMId(vmId) {
+    //     VerifyMessageState storage current = vmLifeCycle[vmId];
+    //     if (current.atStep != 0) revert StepSkipped();
 
-        // Use hashMessageLegacy for message path
-        // current.messageHash = hashMessageLegacy(
-        //     current.message,
-        //     current.publicKey,
-        //     current.signature.r,
-        //     current.prefix
-        // );
+    //     // Use hashMessageLegacy for message path
+    //     // current.messageHash = hashMessageLegacy(
+    //     //     current.message,
+    //     //     current.publicKey,
+    //     //     current.signature.r,
+    //     //     current.prefix
+    //     // );
 
-        current.atStep = 1;
-    }
+    //     current.atStep = 1;
+    // }
 
-    function step_2_VM(uint256 vmId) external isValidVMId(vmId) {
-        VerifyMessageState storage current = vmLifeCycle[vmId];
-        if (current.atStep != 1) revert StepSkipped();
+    // function step_2_VM(uint256 vmId) external isValidVMId(vmId) {
+    //     VerifyMessageState storage current = vmLifeCycle[vmId];
+    //     if (current.atStep != 1) revert StepSkipped();
 
-        // Create compressed point format from public key
-        PointCompressed memory compressed = PointCompressed({
-            x: current.publicKey.x,
-            isOdd: (current.publicKey.y % 2 == 1)
-        });
+    //     // Create compressed point format from public key
+    //     PointCompressed memory compressed = PointCompressed({
+    //         x: current.publicKey.x,
+    //         isOdd: (current.publicKey.y % 2 == 1)
+    //     });
 
-        // Convert to group point
-        current.pkInGroup = _defaultToGroup(compressed);
+    //     // Convert to group point
+    //     current.pkInGroup = _defaultToGroup(compressed);
 
-        current.atStep = 2;
-    }
+    //     current.atStep = 2;
+    // }
 
-    function step_3_VM(uint256 vmId) external isValidVMId(vmId) {
-        VerifyMessageState storage current = vmLifeCycle[vmId];
-        if (current.atStep != 2) revert StepSkipped();
+    // function step_3_VM(uint256 vmId) external isValidVMId(vmId) {
+    //     VerifyMessageState storage current = vmLifeCycle[vmId];
+    //     if (current.atStep != 2) revert StepSkipped();
 
-        // Calculate s*G where G is generator point
-        Point memory G = Point(G_X, G_Y); // From PallasConstants
-        current.sG = scalarMul(G, current.signature.s);
+    //     // Calculate s*G where G is generator point
+    //     Point memory G = Point(G_X, G_Y); // From PallasConstants
+    //     current.sG = scalarMul(G, current.signature.s);
 
-        current.atStep = 3;
-    }
+    //     current.atStep = 3;
+    // }
 
-    function step_4_VM(uint256 vmId) external isValidVMId(vmId) {
-        VerifyMessageState storage current = vmLifeCycle[vmId];
-        if (current.atStep != 3) revert StepSkipped();
+    // function step_4_VM(uint256 vmId) external isValidVMId(vmId) {
+    //     VerifyMessageState storage current = vmLifeCycle[vmId];
+    //     if (current.atStep != 3) revert StepSkipped();
 
-        // Calculate e*pkInGroup where e is the message hash
-        current.ePk = scalarMul(current.pkInGroup, current.messageHash);
+    //     // Calculate e*pkInGroup where e is the message hash
+    //     current.ePk = scalarMul(current.pkInGroup, current.messageHash);
 
-        current.atStep = 4;
-    }
+    //     current.atStep = 4;
+    // }
 
-    function step_5_VM(uint256 vmId) external isValidVMId(vmId) {
-        VerifyMessageState storage current = vmLifeCycle[vmId];
-        if (current.atStep != 4) revert StepSkipped();
+    // function step_5_VM(uint256 vmId) external isValidVMId(vmId) {
+    //     VerifyMessageState storage current = vmLifeCycle[vmId];
+    //     if (current.atStep != 4) revert StepSkipped();
 
-        // R = sG - ePk
-        current.R = addPoints(
-            current.sG,
-            Point(current.ePk.x, FIELD_MODULUS - current.ePk.y) // Negate ePk.y to subtract
-        );
+    //     // R = sG - ePk
+    //     current.R = addPoints(
+    //         current.sG,
+    //         Point(current.ePk.x, FIELD_MODULUS - current.ePk.y) // Negate ePk.y to subtract
+    //     );
 
-        current.atStep = 5;
-    }
+    //     current.atStep = 5;
+    // }
 
-    function step_6_VM(uint256 vmId) external isValidVMId(vmId) returns (bool) {
-        VerifyMessageState storage current = vmLifeCycle[vmId];
-        if (current.atStep != 5) revert StepSkipped();
+    // function step_6_VM(uint256 vmId) external isValidVMId(vmId) returns (bool) {
+    //     VerifyMessageState storage current = vmLifeCycle[vmId];
+    //     if (current.atStep != 5) revert StepSkipped();
 
-        // Final verification:
-        // 1. Check R.x equals signature.r
-        // 2. Check R.y is even
-        current.isValid =
-            (current.R.x == current.signature.r) &&
-            isEven(current.R.y);
-        current.atStep = 6;
+    //     // Final verification:
+    //     // 1. Check R.x equals signature.r
+    //     // 2. Check R.y is even
+    //     current.isValid =
+    //         (current.R.x == current.signature.r) &&
+    //         isEven(current.R.y);
+    //     current.atStep = 6;
 
-        return current.isValid;
-    }
+    //     return current.isValid;
+    // }
 
     /// @dev Equivalent to CircuitString.from(str).hash() from o1js
     /// @param str The message string.

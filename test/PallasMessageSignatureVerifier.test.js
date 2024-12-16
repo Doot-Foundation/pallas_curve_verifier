@@ -28,7 +28,7 @@ describe("PallasMessageSignatureVerifier", function () {
         publicKey: "B62qj2vSpa1MEXNPZAkLdEzQdRS9iE8NhhRfpqLCAvW6QCPi8fxAYnM",
       };
 
-      const message = "Test message for verification";
+      const message = "MINA MINA MINA MINA MINA";
 
       // Get signed message
       const signedMessage = client.signMessage(message, keypair.privateKey);
@@ -56,7 +56,7 @@ describe("PallasMessageSignatureVerifier", function () {
 
       const vmId = 0;
 
-      console.log("\n\n\n\n");
+      console.log("\n");
 
       let txn;
       txn = await verifier.step_0_VM_assignValues(
@@ -99,7 +99,7 @@ describe("PallasMessageSignatureVerifier", function () {
       await txn.wait();
 
       const finalObject = await verifier.getVMState(vmId);
-      console.log(finalObject);
+      console.log(finalObject[6]);
       expect(finalObject[11]).to.equal(result);
     });
   });
