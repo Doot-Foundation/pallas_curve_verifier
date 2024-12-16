@@ -112,29 +112,29 @@ describe("PallasCurve", function () {
     });
   });
 
-  describe("Field Conversion Operations", function () {
-    it("Should convert string to fields correctly", async function () {
-      const { curve } = await loadFixture(deployCurveFixture);
+  // describe("Field Conversion Operations", function () {
+  //   it("Should convert string to fields correctly", async function () {
+  //     const { curve } = await loadFixture(deployCurveFixture);
 
-      const testString = "Test123";
-      const result = await curve.stringToFields(testString);
+  //     const testString = "Test123";
+  //     const result = await curve.stringToFields(testString);
 
-      const firstByte = result[0] & BigInt(0xff);
-      expect(Number(firstByte)).to.equal(testString.charCodeAt(0));
-    });
+  //     const firstByte = result[0] & BigInt(0xff);
+  //     expect(Number(firstByte)).to.equal(testString.charCodeAt(0));
+  //   });
 
-    it("Should convert bits to fields correctly", async function () {
-      const { curve } = await loadFixture(deployCurveFixture);
+  //   it("Should convert bits to fields correctly", async function () {
+  //     const { curve } = await loadFixture(deployCurveFixture);
 
-      const testBits = Array(256).fill(false);
-      testBits[0] = true;
-      testBits[255] = true;
-      const words = [1n | (1n << 255n)];
+  //     const testBits = Array(256).fill(false);
+  //     testBits[0] = true;
+  //     testBits[255] = true;
+  //     const words = [1n | (1n << 255n)];
 
-      const result = await curve.bitsToFields(words, 256n);
-      expect(result[0].toString()).to.not.equal("0");
-    });
-  });
+  //     const result = await curve.bitsToFields(words, 256n);
+  //     expect(result[0].toString()).to.not.equal("0");
+  //   });
+  // });
 
   describe("Point Addition", function () {
     it("Should match o1js point addition", async function () {

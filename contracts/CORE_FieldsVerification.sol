@@ -1,32 +1,24 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "./PallasConstants.sol";
-import "./PallasTypes.sol";
-import "./PallasCurve.sol";
-import "./PoseidonT3.sol";
-import "hardhat/console.sol";
+import "./kimchi/Poseidon.sol";
 
 error InvalidPublicKey();
 error StepSkipped();
 
 /**
- * @title PallasSignatureVerifier
- * @dev Verifies signatures created using Pallas curve and o1js
+ * @title PallasFieldsSignatureVerifier
+ * @dev Verifies signatures over fields generated using mina-signer.
  */
-contract PallasSignatureVerifier is
-    PallasConstants,
-    PallasTypes,
-    PallasCurve,
-    PoseidonT3
-{
+
+contract PallasFieldsSignatureVerifier is Poseidon {
     struct VerifyMessageState {
         uint8 atStep;
         bool mainnet; // Added for network type
         Point publicKey;
         Signature signature;
         string message;
-        uint256[] charValues; // For storing the character array
+        string prefix; // Stored prefix as field element (step 1)
         uint256 messageHash; // For storing the computed hash
         Point pkInGroup; // Public key in group form
         Point sG; // s*G computation
@@ -115,11 +107,17 @@ contract PallasSignatureVerifier is
         return lhs == rhs;
     }
 
-    /// @dev verifyFields() method from o1js.
-    /// @param _publicKey The pallas point (Public Key) of the signer
-    /// @param _signature The associated Schorr Signature
-    /// @param _fields The fields array.
-    /// @param _network False for 'testnet' and True for 'mainnet'
+    /// @notice Zero step - Input assignment and validation
+    /// ==================================================
+    /// References the first part of verify() in o1js:
+    /// let { r, s } = signature;
+    /// let pk = PublicKey.toGroup(publicKey);
+    /// @param _publicKey The public key point (x,y)
+    /// @param _signature Contains r (x-coordinate) and s (scalar)
+    /// @param _fields Array of field elements to verify
+    /// @param _network Network identifier (mainnet/testnet).
+    /// Note for _network : It doesn't matter what we use since mina-signer uses 'testnet' regardless
+    /// of the network set.
     function step_0_VF_assignValues(
         Point calldata _publicKey,
         Signature calldata _signature,
@@ -145,13 +143,15 @@ contract PallasSignatureVerifier is
         return toSetId;
     }
 
+    /// @notice Compute hash of the message with network prefix
     /// ==================================================
-    /// hashMessage(message, pk, r, networkId)
-    /// ==================================================
-    /// message : { fields: data }
-    /// pk : PublicKey in Group representation : {x,y}
-    /// r : Field from Signature
-    /// networkId is fixed to 'testnet'
+    /// Matches the first part of verify():
+    /// let e = hashMessage(message, pk, r, networkId);
+    /// Process:
+    /// 1. Convert message to HashInput format
+    /// 2. Append public key coordinates and signature.r
+    /// 3. Apply network prefix and hash
+    /// Order is critical: [message fields] + [pk.x, pk.y, sig.r]
     /// @param vfId id
     function step_1_VF(uint256 vfId) external isValidVFId(vfId) {
         VerifyFieldsState storage current = vfLifeCycle[vfId];
@@ -171,6 +171,14 @@ contract PallasSignatureVerifier is
         current.atStep = 1;
     }
 
+    /// @notice Convert public key to curve point
+    /// ==================================================
+    /// From o1js: PublicKey.toGroup(publicKey)
+    /// This converts compressed public key format (x, isOdd)
+    /// to full curve point representation by:
+    /// 1. Computing y² = x³ + 5 (Pallas curve equation)
+    /// 2. Taking square root
+    /// 3. Selecting appropriate y value based on isOdd
     function step_2_VF(uint256 vfId) external isValidVFId(vfId) {
         VerifyFieldsState storage current = vfLifeCycle[vfId];
         if (current.atStep != 1) revert StepSkipped();
@@ -239,11 +247,13 @@ contract PallasSignatureVerifier is
     /// @dev verifyMessage()
     /// @param _signature The associated signature.
     /// @param _publicKey The public key.
-    /// @param message The string message
+    /// @param _message The string message
+    /// @param _network Mainnet or testnet
     function step_0_VM_assignValues(
-        Signature calldata _signature,
         Point calldata _publicKey,
-        string calldata message
+        Signature calldata _signature,
+        string calldata _message,
+        bool _network
     ) external returns (uint256) {
         if (!isValidPublicKey(_publicKey)) revert InvalidPublicKey();
 
@@ -254,7 +264,12 @@ contract PallasSignatureVerifier is
         toPush.atStep = 0;
         toPush.publicKey = _publicKey;
         toPush.signature = _signature;
-        toPush.message = message;
+        toPush.message = _message;
+        toPush.mainnet = _network;
+
+        toPush.prefix = _network
+            ? "MinaSignatureMainnet"
+            : "CodaSignature*******";
 
         vmLifeCycleCreator[toSetId] = msg.sender;
 
@@ -265,13 +280,13 @@ contract PallasSignatureVerifier is
         VerifyMessageState storage current = vmLifeCycle[vmId];
         if (current.atStep != 0) revert StepSkipped();
 
-        // Convert string to character array using fromStringToHash
-        uint256[] memory charValues;
-        uint256 hashUint;
-        (charValues, hashUint) = fromStringToHash(current.message);
-
-        current.charValues = charValues;
-        current.messageHash = hashUint; // Store the hash too
+        // Use hashMessageLegacy for message path
+        // current.messageHash = hashMessageLegacy(
+        //     current.message,
+        //     current.publicKey,
+        //     current.signature.r,
+        //     current.prefix
+        // );
 
         current.atStep = 1;
     }
@@ -279,24 +294,6 @@ contract PallasSignatureVerifier is
     function step_2_VM(uint256 vmId) external isValidVMId(vmId) {
         VerifyMessageState storage current = vmLifeCycle[vmId];
         if (current.atStep != 1) revert StepSkipped();
-
-        // Network prefix
-        string memory prefix = current.mainnet
-            ? "MinaSignatureMainnet"
-            : "CodaSignature*******";
-
-        // Hash with prefix
-        current.messageHash = poseidonHashWithPrefix(
-            prefix,
-            current.charValues
-        );
-
-        current.atStep = 2;
-    }
-
-    function step_3_VM(uint256 vmId) external isValidVMId(vmId) {
-        VerifyMessageState storage current = vmLifeCycle[vmId];
-        if (current.atStep != 2) revert StepSkipped();
 
         // Create compressed point format from public key
         PointCompressed memory compressed = PointCompressed({
@@ -307,6 +304,17 @@ contract PallasSignatureVerifier is
         // Convert to group point
         current.pkInGroup = _defaultToGroup(compressed);
 
+        current.atStep = 2;
+    }
+
+    function step_3_VM(uint256 vmId) external isValidVMId(vmId) {
+        VerifyMessageState storage current = vmLifeCycle[vmId];
+        if (current.atStep != 2) revert StepSkipped();
+
+        // Calculate s*G where G is generator point
+        Point memory G = Point(G_X, G_Y); // From PallasConstants
+        current.sG = scalarMul(G, current.signature.s);
+
         current.atStep = 3;
     }
 
@@ -314,9 +322,8 @@ contract PallasSignatureVerifier is
         VerifyMessageState storage current = vmLifeCycle[vmId];
         if (current.atStep != 3) revert StepSkipped();
 
-        // Calculate s*G where G is generator point
-        Point memory G = Point(G_X, G_Y); // From PallasConstants
-        current.sG = scalarMul(G, current.signature.s);
+        // Calculate e*pkInGroup where e is the message hash
+        current.ePk = scalarMul(current.pkInGroup, current.messageHash);
 
         current.atStep = 4;
     }
@@ -325,28 +332,18 @@ contract PallasSignatureVerifier is
         VerifyMessageState storage current = vmLifeCycle[vmId];
         if (current.atStep != 4) revert StepSkipped();
 
-        // Calculate e*pkInGroup where e is the message hash
-        current.ePk = scalarMul(current.pkInGroup, current.messageHash);
-
-        current.atStep = 5;
-    }
-
-    function step_6_VM(uint256 vmId) external isValidVMId(vmId) {
-        VerifyMessageState storage current = vmLifeCycle[vmId];
-        if (current.atStep != 5) revert StepSkipped();
-
         // R = sG - ePk
         current.R = addPoints(
             current.sG,
             Point(current.ePk.x, FIELD_MODULUS - current.ePk.y) // Negate ePk.y to subtract
         );
 
-        current.atStep = 6;
+        current.atStep = 5;
     }
 
-    function step_7_VM(uint256 vmId) external isValidVMId(vmId) returns (bool) {
+    function step_6_VM(uint256 vmId) external isValidVMId(vmId) returns (bool) {
         VerifyMessageState storage current = vmLifeCycle[vmId];
-        if (current.atStep != 6) revert StepSkipped();
+        if (current.atStep != 5) revert StepSkipped();
 
         // Final verification:
         // 1. Check R.x equals signature.r
@@ -354,7 +351,7 @@ contract PallasSignatureVerifier is
         current.isValid =
             (current.R.x == current.signature.r) &&
             isEven(current.R.y);
-        current.atStep = 7;
+        current.atStep = 6;
 
         return current.isValid;
     }
@@ -412,7 +409,7 @@ contract PallasSignatureVerifier is
         // y² = x³ + 5
         uint256 x2 = mulmod(_x, _x, FIELD_MODULUS);
         uint256 x3 = mulmod(x2, _x, FIELD_MODULUS);
-        uint256 y2 = addmod(x3, B, FIELD_MODULUS); // B is 5 for Pallas
+        uint256 y2 = addmod(x3, BEQ, FIELD_MODULUS); // B is 5 for Pallas
 
         // Find square root
         uint256 _y = sqrtmod(y2, FIELD_MODULUS);
@@ -425,13 +422,4 @@ contract PallasSignatureVerifier is
 
         return Point({x: _x, y: _y});
     }
-
-    // function groupToDefault(
-    //     uint256 x,
-    //     uint256 y
-    // ) public pure returns (uint256 x_, bool isOdd) {
-    //     // Return named tuple instead of array
-    //     isOdd = (y % 2 == 1);
-    //     x_ = x;
-    // }
 }

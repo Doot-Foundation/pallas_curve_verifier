@@ -153,4 +153,28 @@ describe("PoseidonT3", function () {
       expect(result.every((x) => x.toString() !== "0")).to.be.true;
     });
   });
+
+  describe("Field Conversion Operations", function () {
+    it("Should convert string to fields correctly", async function () {
+      const { poseidon } = await loadFixture(deployPoseidonFixture);
+
+      const testString = "Test123";
+      const result = await poseidon.stringToFields(testString);
+
+      const firstByte = result[0] & BigInt(0xff);
+      expect(Number(firstByte)).to.equal(testString.charCodeAt(0));
+    });
+
+    it("Should convert bits to fields correctly", async function () {
+      const { poseidon } = await loadFixture(deployPoseidonFixture);
+
+      const testBits = Array(256).fill(false);
+      testBits[0] = true;
+      testBits[255] = true;
+      const words = [1n | (1n << 255n)];
+
+      const result = await poseidon.bitsToFields(words, 256n);
+      expect(result[0].toString()).to.not.equal("0");
+    });
+  });
 });

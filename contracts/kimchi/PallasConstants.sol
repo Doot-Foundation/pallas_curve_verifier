@@ -2,34 +2,14 @@
 pragma solidity ^0.8.0;
 
 contract PallasConstants {
-    // Field and curve parameters
-    uint256 public constant FIELD_MODULUS =
-        0x40000000000000000000000000000000224698fc094cf91b992d30ed00000001;
-    uint256 public constant SCALAR_MODULUS =
-        0x40000000000000000000000000224698fc0994a8dd8c46eb2100000001;
-
-    uint256 public constant DEFAULT_STRING_LENGTH = 128;
-
-    // curve equation: y² = x³ + 5
-    uint256 public constant B = 5;
-
-    // Generator point from o1js
-    uint256 public constant G_X = 1;
-    uint256 public constant G_Y =
-        0x1b74b5a30a12937c53dfa9f06378ee548f655bd4333d477119cf7a23caed2abb;
-
     // Poseidon parameters matching poseidonParamsKimchiFp
-    uint256 public constant POSEIDON_FULL_ROUNDS = 55;
-    uint256 public constant POSEIDON_STATE_SIZE = 3;
-    uint256 public constant POSEIDON_RATE = 2;
-    uint256 public constant POSEIDON_POWER = 7;
-    bool public constant POSEIDON_HAS_INITIAL_ROUND_CONSTANT = false;
+    uint256 internal constant POSEIDON_FULL_ROUNDS = 55;
+    uint256 internal constant POSEIDON_STATE_SIZE = 3;
+    uint256 internal constant POSEIDON_RATE = 2;
+    uint256 internal constant POSEIDON_POWER = 7;
+    bool internal constant POSEIDON_HAS_INITIAL_ROUND_CONSTANT = false;
 
-    // Signature constants
-    string public constant SIGNATURE_PREFIX = "CodaSignature*******";
-    string public constant MAINNET_SIGNATURE_PREFIX = "MinaSignatureMainnet";
-
-    uint256[3][3] public mdsMatrix = [
+    uint256[3][3] internal mdsMatrix = [
         [
             12035446894107573964500871153637039653510326950134440362813193268448863222019,
             25461374787957152039031444204194007219326765802730624564074257060397341542093,
@@ -46,7 +26,8 @@ contract PallasConstants {
             27566319851776897085443681456689352477426926500749993803132851225169606086988
         ]
     ];
-    uint256[3][55] public roundConstants = [
+
+    uint256[3][55] internal roundConstants = [
         [
             21155079691556475130150866428468322463125560312786319980770950159250751855431,
             16883442198399350202652499677723930673110172289234921799701652810789093522349,

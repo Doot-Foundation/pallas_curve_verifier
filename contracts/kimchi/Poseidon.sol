@@ -2,24 +2,27 @@
 pragma solidity ^0.8.0;
 
 import "./PallasConstants.sol";
+import "./PallasCurve.sol";
 import "hardhat/console.sol";
 
 /**
  * @title PoseidonT3
  * @dev Implementation of Poseidon hash function for t = 3 (2 inputs)
  */
-contract PoseidonT3 is PallasConstants {
+contract Poseidon is PallasCurve, PallasConstants {
     /**
      * @dev Power7 function matching o1js implementation
      */
-    function power7(uint256 x) public pure returns (uint256) {
+    function power7(uint256 x) internal pure returns (uint256) {
         uint256 x2 = mulmod(x, x, FIELD_MODULUS);
         uint256 x3 = mulmod(x2, x, FIELD_MODULUS);
         uint256 x6 = mulmod(x3, x3, FIELD_MODULUS);
         return mulmod(x6, x, FIELD_MODULUS);
     }
 
-    function prefixToField(string memory prefix) public pure returns (uint256) {
+    function prefixToField(
+        string memory prefix
+    ) internal pure returns (uint256) {
         bytes memory prefixBytes = bytes(prefix);
         require(prefixBytes.length < 32, "prefix too long");
 
@@ -34,7 +37,7 @@ contract PoseidonT3 is PallasConstants {
         return result % FIELD_MODULUS;
     }
 
-    function stringToField(string memory str) public pure returns (uint256) {
+    function stringToField(string memory str) internal pure returns (uint256) {
         bytes memory strBytes = bytes(str);
         require(strBytes.length < 32, "prefix too long");
 
@@ -47,7 +50,6 @@ contract PoseidonT3 is PallasConstants {
             // zeros are handled implicitly
         }
 
-        console.log(result % FIELD_MODULUS);
         return result % FIELD_MODULUS;
     }
 
@@ -57,7 +59,7 @@ contract PoseidonT3 is PallasConstants {
     function getMdsValue(
         uint256 row,
         uint256 col
-    ) public view returns (uint256) {
+    ) internal view returns (uint256) {
         require(row < 3 && col < 3, "Invalid MDS indices");
         return mdsMatrix[row][col];
     }
@@ -68,7 +70,7 @@ contract PoseidonT3 is PallasConstants {
     function getRoundConstant(
         uint256 round,
         uint256 pos
-    ) public view returns (uint256) {
+    ) internal view returns (uint256) {
         require(
             round < POSEIDON_FULL_ROUNDS && pos < 3,
             "Invalid round constant indices"
@@ -81,7 +83,7 @@ contract PoseidonT3 is PallasConstants {
      */
     function mdsMultiply(
         uint256[3] memory state
-    ) public view returns (uint256[3] memory result) {
+    ) internal view returns (uint256[3] memory result) {
         for (uint256 i = 0; i < 3; i++) {
             result[i] = 0;
             for (uint256 j = 0; j < 3; j++) {
@@ -96,7 +98,7 @@ contract PoseidonT3 is PallasConstants {
 
     function poseidonPermutation(
         uint256[3] memory state
-    ) public view returns (uint256[3] memory) {
+    ) internal view returns (uint256[3] memory) {
         uint256[3] memory currentState = state;
 
         for (uint256 round = 0; round < POSEIDON_FULL_ROUNDS; round++) {
@@ -120,7 +122,7 @@ contract PoseidonT3 is PallasConstants {
     /**
      * @dev Initial state array [0, 0, 0]
      */
-    function initialState() public pure returns (uint256[3] memory) {
+    function initialState() internal pure returns (uint256[3] memory) {
         return [uint256(0), uint256(0), uint256(0)];
     }
 
@@ -130,7 +132,7 @@ contract PoseidonT3 is PallasConstants {
     function update(
         uint256[3] memory state,
         uint256[] memory input
-    ) public view returns (uint256[3] memory) {
+    ) internal view returns (uint256[3] memory) {
         if (input.length == 0) {
             return poseidonPermutation(state);
         }
@@ -159,6 +161,15 @@ contract PoseidonT3 is PallasConstants {
         return state;
     }
 
+    function poseidonHash(
+        uint256[] memory input
+    ) public view returns (uint256) {
+        uint256[3] memory state = initialState();
+        state = update(state, input);
+
+        return state[0];
+    }
+
     function poseidonHashWithPrefix(
         string memory prefix,
         uint256[] memory input
@@ -168,15 +179,6 @@ contract PoseidonT3 is PallasConstants {
         uint256[] memory prefixArray = new uint256[](1);
         prefixArray[0] = prefixToField(prefix);
         state = update(state, prefixArray);
-        state = update(state, input);
-
-        return state[0];
-    }
-
-    function poseidonHash(
-        uint256[] memory input
-    ) public view returns (uint256) {
-        uint256[3] memory state = initialState();
         state = update(state, input);
 
         return state[0];
