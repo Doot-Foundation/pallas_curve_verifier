@@ -266,6 +266,51 @@ describe("PallasFieldsSignatureVerifier", function () {
         23452344n,
         3465346n,
         21342321341534n,
+        21342321341534n,
+        12983421374987234n,
+        534098345098345798543n,
+        2938923845090n,
+        999230432802934802394234578n,
+        123456989n,
+        987654321n,
+        23452344n,
+        3465346n,
+        21342321341534n,
+        21342321341534n,
+        12983421374987234n,
+        534098345098345798543n,
+        2938923845090n,
+        999230432802934802394234578n,
+        123456989n,
+        987654321n,
+        23452344n,
+        3465346n,
+        21342321341534n,
+        21342321341534n,
+        12983421374987234n,
+        534098345098345798543n,
+        2938923845090n,
+        999230432802934802394234578n,
+        123456989n,
+        987654321n,
+        23452344n,
+        3465346n,
+        21342321341534n,
+        21342321341534n,
+        12983421374987234n,
+        534098345098345798543n,
+        2938923845090n,
+        999230432802934802394234578n,
+        123456989n,
+        987654321n,
+        23452344n,
+        3465346n,
+        21342321341534n,
+        21342321341534n,
+        12983421374987234n,
+        534098345098345798543n,
+        2938923845090n,
+        999230432802934802394234578n,
       ];
       const signedFields = client.signFields(fields, keypair.privateKey);
 
@@ -274,7 +319,52 @@ describe("PallasFieldsSignatureVerifier", function () {
         987654321n,
         23452344n,
         3465346n,
-        21342321341533n,
+        21342321341534n,
+        21342321341534n,
+        12983421374987234n,
+        534098345098345798543n,
+        2938923845090n,
+        999230432802934802394234578n,
+        123456989n,
+        987654321n,
+        23452344n,
+        3465346n,
+        21342321341534n,
+        21342321341534n,
+        12983421374987234n,
+        534098345098345798543n,
+        2938923845090n,
+        999230432802934802394234578n,
+        123456989n,
+        987654321n,
+        23452344n,
+        3465346n,
+        21342321341534n,
+        21342321341534n,
+        12983421374987234n,
+        534098345098345798543n,
+        2938923845090n,
+        999230432802934802394234578n,
+        123456989n,
+        987654321n,
+        23452344n,
+        3465346n,
+        21342321341534n,
+        21342321341534n,
+        12983421374987234n,
+        534098345098345798543n,
+        2938923845090n,
+        999230432802934802394234578n,
+        123456989n,
+        987654321n,
+        23452344n,
+        3465346n,
+        21342321341534n,
+        21342321341534n,
+        12983421374987234n,
+        534098345098345798543n,
+        2938923845090n,
+        999230432802934802394234579n,
       ];
       const altSignedFields = client.signFields(altFields, keypair.privateKey);
 
@@ -332,26 +422,32 @@ describe("PallasFieldsSignatureVerifier", function () {
       const finalObject = await verifier.getVFState(vfId);
 
       expect(finalObject[12]).to.equal(result);
+      expect(finalObject[12]).to.equal(true);
     });
     it("Should return isValid=false in case invalid.", async function () {
       const { verifier, signedFields, altSignedFields, client } =
         await loadFixture(deployAndSetupFields);
 
-      const signatureObject = Signature.fromBase58(altSignedFields.signature);
-      const s = signatureObject.s.toBigInt();
-      const r = signatureObject.r.toBigInt();
+      /// 3 TEST CASES : signedFields is our original object.
+      ///   1. DIFFERENT SIGNATURE
+      ///   2. DIFFERENT DATA
+      ///   3. DIFFERENT PUBLIC KEY
 
-      const signer = PublicKey.fromBase58(signedFields.publicKey);
-      const signerFull = signer.toGroup();
+      /// DIFFERENT SIGNATURE -------------------------------------------------
+      let signatureObject = Signature.fromBase58(altSignedFields.signature);
+      let s = signatureObject.s.toBigInt();
+      let r = signatureObject.r.toBigInt();
 
-      const result = client.verifyFields({
+      let signer = PublicKey.fromBase58(signedFields.publicKey);
+      let signerFull = signer.toGroup();
+
+      let result = client.verifyFields({
         data: signedFields.data,
         signature: altSignedFields.signature,
         publicKey: signedFields.publicKey,
       });
 
-      // Start verification steps
-      const vfId = 0;
+      let vfId = 0;
 
       let txn;
       txn = await verifier.step_0_VF_assignValues(
@@ -381,7 +477,106 @@ describe("PallasFieldsSignatureVerifier", function () {
       txn = await verifier.step_6_VF(vfId);
       await txn.wait();
 
-      const finalObject = await verifier.getVFState(vfId);
+      let finalObject = await verifier.getVFState(vfId);
+
+      expect(finalObject[12]).to.equal(false);
+      expect(finalObject[12]).to.equal(result);
+
+      /// DIFFERENT DATA -------------------------------------------------
+      signatureObject = Signature.fromBase58(signedFields.signature);
+      s = signatureObject.s.toBigInt();
+      r = signatureObject.r.toBigInt();
+
+      signer = PublicKey.fromBase58(signedFields.publicKey);
+      signerFull = signer.toGroup();
+
+      result = client.verifyFields({
+        data: altSignedFields.data,
+        signature: signedFields.signature,
+        publicKey: signedFields.publicKey,
+      });
+
+      vfId = 1;
+
+      txn;
+      txn = await verifier.step_0_VF_assignValues(
+        { x: signerFull.x.toString(), y: signerFull.y.toString() },
+        { r: r, s: s },
+        altSignedFields.data,
+        false
+      );
+
+      await txn.wait();
+
+      txn = await verifier.step_1_VF(vfId);
+      await txn.wait();
+
+      txn = await verifier.step_2_VF(vfId);
+      await txn.wait();
+
+      txn = await verifier.step_3_VF(vfId);
+      await txn.wait();
+
+      txn = await verifier.step_4_VF(vfId);
+      await txn.wait();
+
+      txn = await verifier.step_5_VF(vfId);
+      await txn.wait();
+
+      txn = await verifier.step_6_VF(vfId);
+      await txn.wait();
+
+      finalObject = await verifier.getVFState(vfId);
+
+      expect(finalObject[12]).to.equal(false);
+      expect(finalObject[12]).to.equal(result);
+
+      /// DIFFERENT PUBLIC KEY -------------------------------------------------
+      signatureObject = Signature.fromBase58(signedFields.signature);
+      s = signatureObject.s.toBigInt();
+      r = signatureObject.r.toBigInt();
+
+      const randomPK = PrivateKey.random();
+      const random = randomPK.toPublicKey();
+      const randomFull = random.toGroup();
+
+      result = client.verifyFields({
+        data: signedFields.data,
+        signature: signedFields.signature,
+        publicKey: random.toBase58(),
+      });
+
+      vfId = 2;
+
+      txn;
+      txn = await verifier.step_0_VF_assignValues(
+        { x: randomFull.x.toString(), y: randomFull.y.toString() },
+        { r: r, s: s },
+        signedFields.data,
+        false
+      );
+
+      await txn.wait();
+
+      txn = await verifier.step_1_VF(vfId);
+      await txn.wait();
+
+      txn = await verifier.step_2_VF(vfId);
+      await txn.wait();
+
+      txn = await verifier.step_3_VF(vfId);
+      await txn.wait();
+
+      txn = await verifier.step_4_VF(vfId);
+      await txn.wait();
+
+      txn = await verifier.step_5_VF(vfId);
+      await txn.wait();
+
+      txn = await verifier.step_6_VF(vfId);
+      await txn.wait();
+
+      finalObject = await verifier.getVFState(vfId);
 
       expect(finalObject[12]).to.equal(false);
       expect(finalObject[12]).to.equal(result);

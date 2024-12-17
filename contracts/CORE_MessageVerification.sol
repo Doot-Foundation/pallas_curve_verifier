@@ -104,13 +104,13 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy {
         VerifyMessageState storage current = vmLifeCycle[vmId];
         if (current.atStep != 0) revert StepSkipped();
 
-        // Use hashMessageLegacy for message path
-        current.messageHash = hashMessageLegacy(
+        uint256 _messageHash = hashMessageLegacy(
             current.message,
             current.publicKey,
             current.signature.r,
             current.prefix
         );
+        current.messageHash = _messageHash;
 
         current.atStep = 1;
     }
