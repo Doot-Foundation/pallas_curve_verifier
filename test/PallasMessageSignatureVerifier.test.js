@@ -98,8 +98,8 @@ describe("PallasMessageSignatureVerifier", function () {
       await txn.wait();
 
       const finalObject = await verifier.getVMState(vmId);
-      expect(finalObject[11]).to.equal(result);
-      expect(finalObject[11]).to.equal(true);
+      expect(finalObject[12]).to.equal(result);
+      expect(finalObject[12]).to.equal(true);
     });
 
     it("Should return isValid=false in case invalid.", async function () {
@@ -149,8 +149,8 @@ describe("PallasMessageSignatureVerifier", function () {
       await txn.wait();
 
       const finalObject = await verifier.getVMState(vmId);
-      expect(finalObject[11]).to.equal(result);
-      expect(finalObject[11]).to.equal(false);
+      expect(finalObject[12]).to.equal(result);
+      expect(finalObject[12]).to.equal(false);
     });
   });
 });

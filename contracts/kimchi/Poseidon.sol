@@ -10,9 +10,10 @@ import "hardhat/console.sol";
  * @dev Implementation of Poseidon hash function for t = 3 (2 inputs)
  */
 contract Poseidon is PallasCurve, PallasConstants {
-    /**
-     * @dev Power7 function matching o1js implementation
-     */
+    /// @notice Computes x^7 mod FIELD_MODULUS
+    /// @dev Optimized power7 implementation matching o1js
+    /// @param x Base value
+    /// @return uint256 Result of x^7 mod FIELD_MODULUS
     function power7(uint256 x) internal pure returns (uint256) {
         uint256 x2 = mulmod(x, x, FIELD_MODULUS);
         uint256 x3 = mulmod(x2, x, FIELD_MODULUS);
@@ -20,42 +21,12 @@ contract Poseidon is PallasCurve, PallasConstants {
         return mulmod(x6, x, FIELD_MODULUS);
     }
 
-    function prefixToField(
-        string memory prefix
-    ) internal pure returns (uint256) {
-        bytes memory prefixBytes = bytes(prefix);
-        require(prefixBytes.length < 32, "prefix too long");
-
-        uint256 result = 0;
-        // Process in little-endian order (like o1js)
-        for (uint i = 0; i < 32; i++) {
-            if (i < prefixBytes.length) {
-                result |= uint256(uint8(prefixBytes[i])) << (i * 8);
-            }
-        }
-
-        return result % FIELD_MODULUS;
-    }
-
-    function stringToField(string memory str) internal pure returns (uint256) {
-        bytes memory strBytes = bytes(str);
-        require(strBytes.length < 32, "prefix too long");
-
-        uint256 result = 0;
-        // Process in little-endian order (like o1js)
-        for (uint i = 0; i < 32; i++) {
-            if (i < strBytes.length) {
-                result |= uint256(uint8(strBytes[i])) << (i * 8);
-            }
-            // zeros are handled implicitly
-        }
-
-        return result % FIELD_MODULUS;
-    }
-
-    /**
-     * @dev Returns MDS matrix values by index
-     */
+    // Matrix and Round Constants
+    /// @notice Retrieves value from MDS matrix at specified position
+    /// @dev Used in the Poseidon permutation
+    /// @param row Row index of MDS matrix
+    /// @param col Column index of MDS matrix
+    /// @return uint256 Value at specified position
     function getMdsValue(
         uint256 row,
         uint256 col
@@ -64,9 +35,11 @@ contract Poseidon is PallasCurve, PallasConstants {
         return mdsMatrix[row][col];
     }
 
-    /**
-     * @dev Returns round constant for given round and position
-     */
+    /// @notice Retrieves round constant for specified round and position
+    /// @dev Used in the Poseidon permutation
+    /// @param round Round number
+    /// @param pos Position within the round
+    /// @return uint256 Round constant value
     function getRoundConstant(
         uint256 round,
         uint256 pos
@@ -78,9 +51,10 @@ contract Poseidon is PallasCurve, PallasConstants {
         return roundConstants[round][pos];
     }
 
-    /**
-     * @dev Matrix multiplication with MDS matrix exactly as in o1js
-     */
+    /// @notice Performs matrix multiplication with MDS matrix
+    /// @dev Exactly matches o1js implementation
+    /// @param state Current state array
+    /// @return result Result of matrix multiplication
     function mdsMultiply(
         uint256[3] memory state
     ) internal view returns (uint256[3] memory result) {
@@ -96,6 +70,18 @@ contract Poseidon is PallasCurve, PallasConstants {
         }
     }
 
+    // State Management
+    /// @notice Creates initial state array [0, 0, 0]
+    /// @dev Used to initialize Poseidon hash state
+    /// @return uint256[3] Initial state array
+    function initialState() internal pure returns (uint256[3] memory) {
+        return [uint256(0), uint256(0), uint256(0)];
+    }
+
+    /// @notice Performs the Poseidon permutation on a state
+    /// @dev Core permutation function for Poseidon hash
+    /// @param state Input state array
+    /// @return uint256[3] Permuted state
     function poseidonPermutation(
         uint256[3] memory state
     ) internal view returns (uint256[3] memory) {
@@ -119,16 +105,11 @@ contract Poseidon is PallasCurve, PallasConstants {
         return currentState;
     }
 
-    /**
-     * @dev Initial state array [0, 0, 0]
-     */
-    function initialState() internal pure returns (uint256[3] memory) {
-        return [uint256(0), uint256(0), uint256(0)];
-    }
-
-    /**
-     * @dev Update state with input
-     */
+    /// @notice Updates state with input values
+    /// @dev Processes input in blocks of POSEIDON_RATE size
+    /// @param state Current state array
+    /// @param input Input values to process
+    /// @return uint256[3] Updated state
     function update(
         uint256[3] memory state,
         uint256[] memory input
@@ -161,6 +142,53 @@ contract Poseidon is PallasCurve, PallasConstants {
         return state;
     }
 
+    /// String/Field Conversions
+    /// @notice Converts a string prefix to a field element
+    /// @dev Processes bytes in little-endian order, matching o1js implementation
+    /// @param prefix The string to convert
+    /// @return uint256 Field element representation of the prefix
+    function prefixToField(
+        string memory prefix
+    ) internal pure returns (uint256) {
+        bytes memory prefixBytes = bytes(prefix);
+        require(prefixBytes.length < 32, "prefix too long");
+
+        uint256 result = 0;
+        // Process in little-endian order (like o1js)
+        for (uint i = 0; i < 32; i++) {
+            if (i < prefixBytes.length) {
+                result |= uint256(uint8(prefixBytes[i])) << (i * 8);
+            }
+        }
+
+        return result % FIELD_MODULUS;
+    }
+
+    /// @notice Converts a string to a field element
+    /// @dev Processes bytes in little-endian order, similar to prefixToField
+    /// @param str The string to convert
+    /// @return uint256 Field element representation of the string
+    function stringToField(string memory str) internal pure returns (uint256) {
+        bytes memory strBytes = bytes(str);
+        require(strBytes.length < 32, "prefix too long");
+
+        uint256 result = 0;
+        // Process in little-endian order (like o1js)
+        for (uint i = 0; i < 32; i++) {
+            if (i < strBytes.length) {
+                result |= uint256(uint8(strBytes[i])) << (i * 8);
+            }
+            // zeros are handled implicitly
+        }
+
+        return result % FIELD_MODULUS;
+    }
+
+    // Main Hashing Functions
+    /// @notice Computes Poseidon hash of input array
+    /// @dev Main hashing function without prefix
+    /// @param input Array of field elements to hash
+    /// @return uint256 Resulting hash
     function poseidonHash(
         uint256[] memory input
     ) public view returns (uint256) {
@@ -170,6 +198,11 @@ contract Poseidon is PallasCurve, PallasConstants {
         return state[0];
     }
 
+    /// @notice Computes Poseidon hash with prefix
+    /// @dev Hashes prefix followed by input array
+    /// @param prefix String prefix to prepend
+    /// @param input Array of field elements to hash
+    /// @return uint256 Resulting hash
     function poseidonHashWithPrefix(
         string memory prefix,
         uint256[] memory input
@@ -182,5 +215,31 @@ contract Poseidon is PallasCurve, PallasConstants {
         state = update(state, input);
 
         return state[0];
+    }
+
+    /// @notice Hashes message fields with public key and signature data
+    /// @dev Implements message hashing as specified in the signing scheme
+    /// @param fields Array of message fields
+    /// @param publicKey Public key point
+    /// @param r X-coordinate of signature point
+    /// @param prefix Network-specific prefix
+    /// @return uint256 Resulting message hash
+    function hashMessage(
+        uint256[] memory fields,
+        Point memory publicKey,
+        uint256 r,
+        string memory prefix
+    ) public view returns (uint256) {
+        //let input = HashInput.append(message, { fields: [x, y, r] });
+        uint256[] memory message = fields;
+        uint256[] memory fullInput = new uint256[](message.length + 3);
+        for (uint i = 0; i < message.length; i++) {
+            fullInput[i] = message[i];
+        }
+        fullInput[message.length] = publicKey.x;
+        fullInput[message.length + 1] = publicKey.y;
+        fullInput[message.length + 2] = r;
+
+        return poseidonHashWithPrefix(prefix, fullInput);
     }
 }

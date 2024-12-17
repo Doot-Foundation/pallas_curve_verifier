@@ -7,7 +7,7 @@ module.exports = {
     settings: {
       optimizer: {
         enabled: true,
-        runs: 100,
+        runs: 20000,
         details: {
           yul: true,
           yulDetails: {
