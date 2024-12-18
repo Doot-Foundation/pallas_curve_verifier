@@ -10,6 +10,11 @@ import "hardhat/console.sol";
  * @dev Implementation of Poseidon hash function for t = 3 (2 inputs)
  */
 contract Poseidon is PallasCurve, PallasConstants {
+    uint256 internal constant CODA_PREFIX_FIELD =
+        240717916736854602989207148466022993262069182275;
+    uint256 internal constant MINA_PREFIX_FIELD =
+        664504924603203994814403132056773144791042910541;
+
     /// @notice Computes x^7 mod FIELD_MODULUS
     /// @dev Optimized power7 implementation matching o1js
     /// @param x Base value
@@ -58,16 +63,35 @@ contract Poseidon is PallasCurve, PallasConstants {
     function mdsMultiply(
         uint256[3] memory state
     ) internal view returns (uint256[3] memory result) {
-        for (uint256 i = 0; i < 3; i++) {
-            result[i] = 0;
-            for (uint256 j = 0; j < 3; j++) {
-                result[i] = addmod(
-                    result[i],
-                    mulmod(getMdsValue(i, j), state[j], FIELD_MODULUS),
-                    FIELD_MODULUS
-                );
-            }
-        }
+        result[0] = addmod(
+            addmod(
+                mulmod(getMdsValue(0, 0), state[0], FIELD_MODULUS),
+                mulmod(getMdsValue(0, 1), state[1], FIELD_MODULUS),
+                FIELD_MODULUS
+            ),
+            mulmod(getMdsValue(0, 2), state[2], FIELD_MODULUS),
+            FIELD_MODULUS
+        );
+
+        result[1] = addmod(
+            addmod(
+                mulmod(getMdsValue(1, 0), state[0], FIELD_MODULUS),
+                mulmod(getMdsValue(1, 1), state[1], FIELD_MODULUS),
+                FIELD_MODULUS
+            ),
+            mulmod(getMdsValue(1, 2), state[2], FIELD_MODULUS),
+            FIELD_MODULUS
+        );
+
+        result[2] = addmod(
+            addmod(
+                mulmod(getMdsValue(2, 0), state[0], FIELD_MODULUS),
+                mulmod(getMdsValue(2, 1), state[1], FIELD_MODULUS),
+                FIELD_MODULUS
+            ),
+            mulmod(getMdsValue(2, 2), state[2], FIELD_MODULUS),
+            FIELD_MODULUS
+        );
     }
 
     // State Management
@@ -85,24 +109,30 @@ contract Poseidon is PallasCurve, PallasConstants {
     function poseidonPermutation(
         uint256[3] memory state
     ) internal view returns (uint256[3] memory) {
-        uint256[3] memory currentState = state;
-
         for (uint256 round = 0; round < POSEIDON_FULL_ROUNDS; round++) {
-            // Rest of the permutation logic
-            for (uint256 i = 0; i < 3; i++) {
-                currentState[i] = power7(currentState[i]);
-            }
-            currentState = mdsMultiply(currentState);
-            for (uint256 i = 0; i < 3; i++) {
-                currentState[i] = addmod(
-                    currentState[i],
-                    getRoundConstant(round, i),
-                    FIELD_MODULUS
-                );
-            }
-        }
+            state[0] = power7(state[0]);
+            state[1] = power7(state[1]);
+            state[2] = power7(state[2]);
 
-        return currentState;
+            state = mdsMultiply(state);
+
+            state[0] = addmod(
+                state[0],
+                getRoundConstant(round, 0),
+                FIELD_MODULUS
+            );
+            state[1] = addmod(
+                state[1],
+                getRoundConstant(round, 1),
+                FIELD_MODULUS
+            );
+            state[2] = addmod(
+                state[2],
+                getRoundConstant(round, 2),
+                FIELD_MODULUS
+            );
+        }
+        return state;
     }
 
     /// @notice Updates state with input values
@@ -118,25 +148,22 @@ contract Poseidon is PallasCurve, PallasConstants {
             return poseidonPermutation(state);
         }
 
-        // Process exactly POSEIDON_RATE elements at a time
-        for (
-            uint256 blockIndex = 0;
-            blockIndex < input.length;
-            blockIndex += POSEIDON_RATE
-        ) {
-            // Add input to state
-            for (
-                uint256 i = 0;
-                i < POSEIDON_RATE && blockIndex + i < input.length;
-                i++
-            ) {
-                state[i] = addmod(
-                    state[i],
-                    input[blockIndex + i],
+        uint256 blockIndex;
+        while (blockIndex < input.length) {
+            // Unrolled POSEIDON_RATE loop for common case of rate=2
+            if (blockIndex < input.length) {
+                state[0] = addmod(state[0], input[blockIndex], FIELD_MODULUS);
+            }
+            if (blockIndex + 1 < input.length) {
+                state[1] = addmod(
+                    state[1],
+                    input[blockIndex + 1],
                     FIELD_MODULUS
                 );
             }
+
             state = poseidonPermutation(state);
+            blockIndex += POSEIDON_RATE;
         }
 
         return state;
@@ -230,16 +257,44 @@ contract Poseidon is PallasCurve, PallasConstants {
         uint256 r,
         string memory prefix
     ) public view returns (uint256) {
-        //let input = HashInput.append(message, { fields: [x, y, r] });
-        uint256[] memory message = fields;
-        uint256[] memory fullInput = new uint256[](message.length + 3);
-        for (uint i = 0; i < message.length; i++) {
-            fullInput[i] = message[i];
-        }
-        fullInput[message.length] = publicKey.x;
-        fullInput[message.length + 1] = publicKey.y;
-        fullInput[message.length + 2] = r;
+        // Pre-allocate array and copy fields
+        uint256[] memory fullInput = new uint256[](fields.length + 3);
 
-        return poseidonHashWithPrefix(prefix, fullInput);
+        assembly {
+            let length := mload(fields)
+            let srcPtr := add(fields, 0x20)
+            let destPtr := add(fullInput, 0x20)
+            // Copy fields array
+            for {
+                let i := 0
+            } lt(i, length) {
+                i := add(i, 1)
+            } {
+                mstore(
+                    add(destPtr, mul(i, 0x20)),
+                    mload(add(srcPtr, mul(i, 0x20)))
+                )
+            }
+            // Append public key and signature
+            mstore(add(destPtr, mul(length, 0x20)), mload(publicKey))
+            mstore(
+                add(destPtr, mul(add(length, 1), 0x20)),
+                mload(add(publicKey, 0x20))
+            )
+            mstore(add(destPtr, mul(add(length, 2), 0x20)), r)
+        }
+
+        // Use cached prefix value
+        uint256[3] memory state = initialState();
+        uint256[] memory prefixArray = new uint256[](1);
+        prefixArray[0] = keccak256(bytes(prefix)) ==
+            keccak256(bytes("MinaSignatureMainnet"))
+            ? MINA_PREFIX_FIELD
+            : CODA_PREFIX_FIELD;
+
+        state = update(state, prefixArray);
+        state = update(state, fullInput);
+
+        return state[0];
     }
 }

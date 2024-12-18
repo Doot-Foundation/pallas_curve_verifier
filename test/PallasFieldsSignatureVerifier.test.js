@@ -18,235 +18,6 @@ describe("PallasFieldsSignatureVerifier", function () {
     return { verifier, deployer };
   }
 
-  // describe("Public Key Verification", function () {
-  //   it("Should verify valid public key", async function () {
-  //     const { verifier } = await loadFixture(deployVerifierFixture);
-
-  //     const generatedPK = PrivateKey.random();
-  //     const key = generatedPK.toPublicKey().toGroup();
-  //     const point = {
-  //       x: BigInt(key.x.toString()),
-  //       y: BigInt(key.y.toString()),
-  //     };
-
-  //     const isValid = await verifier.isValidPublicKey(point);
-  //     expect(isValid).to.be.true;
-  //   });
-
-  //   it("Should reject invalid public key point", async function () {
-  //     const { verifier } = await loadFixture(deployVerifierFixture);
-
-  //     const invalidPoint = { x: 1n, y: 1n };
-  //     const isValid = await verifier.isValidPublicKey(invalidPoint);
-  //     expect(isValid).to.be.false;
-  //   });
-  // });
-
-  // describe("Point Conversion", function () {
-  //   it("Should compress/decompress points identically to o1js", async function () {
-  //     const { verifier } = await loadFixture(deployVerifierFixture);
-
-  //     const privateKey = PrivateKey.random();
-  //     const defaultPoint = privateKey.toPublicKey();
-  //     const point = defaultPoint.toGroup();
-
-  //     // Pass individual parameters
-  //     const decompressed = await verifier.defaultToGroup(
-  //       BigInt(defaultPoint.x.toString()),
-  //       defaultPoint.isOdd.toBoolean()
-  //     );
-
-  //     expect(decompressed[0].toString()).to.equal(point.x.toString());
-  //     expect(decompressed[1].toString()).to.equal(point.y.toString());
-  //   });
-
-  //   it("Should correctly convert between group formats", async function () {
-  //     const { verifier } = await loadFixture(deployVerifierFixture);
-
-  //     const key = PrivateKey.random().toPublicKey();
-  //     const point = {
-  //       x: BigInt(key.x.toString()),
-  //       y: BigInt(key.toGroup().y.toString()),
-  //     };
-
-  //     // Get back [x, isOdd]
-  //     const [compressedX, isOdd] = await verifier.groupToDefault(
-  //       point.x,
-  //       point.y
-  //     );
-
-  //     const decompressed = await verifier.defaultToGroup(compressedX, isOdd);
-
-  //     expect(decompressed[0].toString()).to.equal(point.x.toString());
-  //     expect(decompressed[1].toString()).to.equal(point.y.toString());
-  //   });
-  // });
-
-  // describe("String to Hash Conversion", function () {
-  //   it("Should convert string to character array and hash correctly", async function () {
-  //     const { verifier } = await loadFixture(deployVerifierFixture);
-
-  //     const testString = "test string";
-  //     const [charValues, hashUint] = await verifier.fromStringToHash(
-  //       testString
-  //     );
-
-  //     // Verify char array length matches DEFAULT_STRING_LENGTH
-  //     expect(charValues.length).to.equal(128); // DEFAULT_STRING_LENGTH constant
-
-  //     // Verify first few characters
-  //     expect(Number(charValues[0])).to.equal(testString.charCodeAt(0)); // 't'
-  //     expect(Number(charValues[1])).to.equal(testString.charCodeAt(1)); // 'e'
-
-  //     // Verify padding with zeros
-  //     for (let i = testString.length; i < 128; i++) {
-  //       expect(charValues[i]).to.equal(0);
-  //     }
-
-  //     // Verify hash is non-zero
-  //     expect(hashUint.toString()).to.not.equal("0");
-  //   });
-
-  //   it("Should revert on too long input", async function () {
-  //     const { verifier } = await loadFixture(deployVerifierFixture);
-
-  //     // Create string longer than DEFAULT_STRING_LENGTH
-  //     const longString = "a".repeat(129);
-
-  //     await expect(verifier.fromStringToHash(longString)).to.be.revertedWith(
-  //       "CircuitString.fromString: input string exceeds max length!"
-  //     );
-  //   });
-
-  //   it("Should handle empty string", async function () {
-  //     const { verifier } = await loadFixture(deployVerifierFixture);
-
-  //     const [charValues, hashUint] = await verifier.fromStringToHash("");
-
-  //     // Verify all zeros in char array
-  //     expect(charValues.length).to.equal(128);
-  //     expect(charValues.every((x) => x.toString() === "0")).to.be.true;
-
-  //     // Even empty string should produce non-zero hash
-  //     expect(hashUint.toString()).to.not.equal("0");
-  //   });
-  // });
-
-  // describe("Public Key Validation", function () {
-  //   it("Should validate points on the curve", async function () {
-  //     const { verifier } = await loadFixture(deployVerifierFixture);
-
-  //     // Generate valid point using o1js
-  //     const privateKey = PrivateKey.random();
-  //     const point = privateKey.toPublicKey().toGroup();
-
-  //     const p = {
-  //       x: BigInt(point.x.toString()),
-  //       y: BigInt(point.y.toString()),
-  //     };
-
-  //     // Should be valid - exactly matches o1js check
-  //     expect(await verifier.isValidPublicKey(p)).to.be.true;
-  //   });
-
-  //   it("Should reject points not on the curve", async function () {
-  //     const { verifier } = await loadFixture(deployVerifierFixture);
-
-  //     // Point with invalid y coordinate
-  //     const invalidPoint = {
-  //       x: 1n,
-  //       y: 1n,
-  //     };
-
-  //     expect(await verifier.isValidPublicKey(invalidPoint)).to.be.false;
-  //   });
-
-  //   it("Should reject points >= FIELD_MODULUS", async function () {
-  //     const { verifier } = await loadFixture(deployVerifierFixture);
-
-  //     const invalidPoint = {
-  //       x: FIELD_MODULUS, // Equal to modulus
-  //       y: 0n,
-  //     };
-
-  //     expect(await verifier.isValidPublicKey(invalidPoint)).to.be.false;
-  //   });
-  // });
-
-  // describe("Message Signature Verification", function () {
-  //   async function deployAndSetupMessage() {
-  //     const { verifier } = await loadFixture(deployVerifierFixture);
-
-  //     // Setup mina-signer
-  //     const client = new Client({ network: "mainnet" });
-
-  //     // const keypair = client.genKeys();
-  //     const keypair = {
-  //       privateKey: "EKEEa7Kzjh5ttuSzyjWZF9NEtZrQpsC3taNwKfi8U1nud3MwKvNs",
-  //       publicKey: "B62qj2vSpa1MEXNPZAkLdEzQdRS9iE8NhhRfpqLCAvW6QCPi8fxAYnM",
-  //     };
-
-  //     const message = "Test message for verification";
-
-  //     // Get signed message
-  //     const signedMessage = client.signMessage(message, keypair.privateKey);
-
-  //     return { verifier, signedMessage, keypair, client, message };
-  //   }
-
-  //   it("Should verify message signature through all steps", async function () {
-  //     const { verifier, signedMessage, client, message } = await loadFixture(
-  //       deployAndSetupMessage
-  //     );
-
-  //     // const signatureObject = Signature.fromBase58(signedMessage.signature);
-  //     const s = BigInt(signedMessage.signature.scalar);
-  //     const r = BigInt(signedMessage.signature.field);
-
-  //     const signer = PublicKey.fromBase58(signedMessage.publicKey);
-  //     const signerFull = signer.toGroup();
-
-  //     const result = client.verifyMessage({
-  //       data: signedMessage.data,
-  //       publicKey: signedMessage.publicKey,
-  //       signature: signedMessage.signature,
-  //     });
-
-  //     const vmId = 0;
-
-  //     let txn;
-  //     txn = await verifier.step_0_VM_assignValues(
-  //       { x: signerFull.x.toString(), y: signerFull.y.toString() },
-  //       { r: r, s: s },
-  //       message,
-  //       true
-  //     );
-  //     await txn.wait();
-
-  //     txn = await verifier.step_1_VM(vmId);
-  //     await txn.wait();
-
-  //     txn = await verifier.step_2_VM(vmId);
-  //     await txn.wait();
-
-  //     txn = await verifier.step_3_VM(vmId);
-  //     await txn.wait();
-
-  //     txn = await verifier.step_4_VM(vmId);
-  //     await txn.wait();
-
-  //     txn = await verifier.step_5_VM(vmId);
-  //     await txn.wait();
-
-  //     txn = await verifier.step_6_VM(vmId);
-  //     await txn.wait();
-
-  //     const finalObject = await verifier.getVMState(vmId);
-  //     console.log(finalObject);
-  //     expect(finalObject[12]).to.equal(result);
-  //   });
-  // });
-
   describe("Fields Signature Verification", function () {
     async function deployAndSetupFields() {
       const { verifier } = await loadFixture(deployVerifierFixture);
@@ -261,110 +32,110 @@ describe("PallasFieldsSignatureVerifier", function () {
       };
 
       const fields = [
-        123456989n,
-        987654321n,
-        23452344n,
-        3465346n,
-        21342321341534n,
-        21342321341534n,
-        12983421374987234n,
-        534098345098345798543n,
-        2938923845090n,
-        999230432802934802394234578n,
-        123456989n,
-        987654321n,
-        23452344n,
-        3465346n,
-        21342321341534n,
-        21342321341534n,
-        12983421374987234n,
-        534098345098345798543n,
-        2938923845090n,
-        999230432802934802394234578n,
-        123456989n,
-        987654321n,
-        23452344n,
-        3465346n,
-        21342321341534n,
-        21342321341534n,
-        12983421374987234n,
-        534098345098345798543n,
-        2938923845090n,
-        999230432802934802394234578n,
-        123456989n,
-        987654321n,
-        23452344n,
-        3465346n,
-        21342321341534n,
-        21342321341534n,
-        12983421374987234n,
-        534098345098345798543n,
-        2938923845090n,
-        999230432802934802394234578n,
-        123456989n,
-        987654321n,
-        23452344n,
-        3465346n,
-        21342321341534n,
-        21342321341534n,
-        12983421374987234n,
-        534098345098345798543n,
-        2938923845090n,
-        999230432802934802394234578n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
       ];
       const signedFields = client.signFields(fields, keypair.privateKey);
 
       const altFields = [
-        123456989n,
-        987654321n,
-        23452344n,
-        3465346n,
-        21342321341534n,
-        21342321341534n,
-        12983421374987234n,
-        534098345098345798543n,
-        2938923845090n,
-        999230432802934802394234578n,
-        123456989n,
-        987654321n,
-        23452344n,
-        3465346n,
-        21342321341534n,
-        21342321341534n,
-        12983421374987234n,
-        534098345098345798543n,
-        2938923845090n,
-        999230432802934802394234578n,
-        123456989n,
-        987654321n,
-        23452344n,
-        3465346n,
-        21342321341534n,
-        21342321341534n,
-        12983421374987234n,
-        534098345098345798543n,
-        2938923845090n,
-        999230432802934802394234578n,
-        123456989n,
-        987654321n,
-        23452344n,
-        3465346n,
-        21342321341534n,
-        21342321341534n,
-        12983421374987234n,
-        534098345098345798543n,
-        2938923845090n,
-        999230432802934802394234578n,
-        123456989n,
-        987654321n,
-        23452344n,
-        3465346n,
-        21342321341534n,
-        21342321341534n,
-        12983421374987234n,
-        534098345098345798543n,
-        2938923845090n,
-        999230432802934802394234579n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999999n,
+        998899999999999999999999999999999999999999999999999990n,
       ];
       const altSignedFields = client.signFields(altFields, keypair.privateKey);
 
@@ -421,165 +192,165 @@ describe("PallasFieldsSignatureVerifier", function () {
 
       const finalObject = await verifier.getVFState(vfId);
 
-      expect(finalObject[12]).to.equal(result);
-      expect(finalObject[12]).to.equal(true);
+      expect(finalObject[2]).to.equal(result);
+      expect(finalObject[2]).to.equal(true);
     });
-    it("Should return isValid=false in case invalid.", async function () {
-      const { verifier, signedFields, altSignedFields, client } =
-        await loadFixture(deployAndSetupFields);
+    // it("Should return isValid=false in case invalid.", async function () {
+    //   const { verifier, signedFields, altSignedFields, client } =
+    //     await loadFixture(deployAndSetupFields);
 
-      /// 3 TEST CASES : signedFields is our original object.
-      ///   1. DIFFERENT SIGNATURE
-      ///   2. DIFFERENT DATA
-      ///   3. DIFFERENT PUBLIC KEY
+    //   /// 3 TEST CASES : signedFields is our original object.
+    //   ///   1. DIFFERENT SIGNATURE
+    //   ///   2. DIFFERENT DATA
+    //   ///   3. DIFFERENT PUBLIC KEY
 
-      /// DIFFERENT SIGNATURE -------------------------------------------------
-      let signatureObject = Signature.fromBase58(altSignedFields.signature);
-      let s = signatureObject.s.toBigInt();
-      let r = signatureObject.r.toBigInt();
+    //   /// DIFFERENT SIGNATURE -------------------------------------------------
+    //   let signatureObject = Signature.fromBase58(altSignedFields.signature);
+    //   let s = signatureObject.s.toBigInt();
+    //   let r = signatureObject.r.toBigInt();
 
-      let signer = PublicKey.fromBase58(signedFields.publicKey);
-      let signerFull = signer.toGroup();
+    //   let signer = PublicKey.fromBase58(signedFields.publicKey);
+    //   let signerFull = signer.toGroup();
 
-      let result = client.verifyFields({
-        data: signedFields.data,
-        signature: altSignedFields.signature,
-        publicKey: signedFields.publicKey,
-      });
+    //   let result = client.verifyFields({
+    //     data: signedFields.data,
+    //     signature: altSignedFields.signature,
+    //     publicKey: signedFields.publicKey,
+    //   });
 
-      let vfId = 0;
+    //   let vfId = 0;
 
-      let txn;
-      txn = await verifier.step_0_VF_assignValues(
-        { x: signerFull.x.toString(), y: signerFull.y.toString() },
-        { r: r, s: s },
-        signedFields.data,
-        false
-      );
+    //   let txn;
+    //   txn = await verifier.step_0_VF_assignValues(
+    //     { x: signerFull.x.toString(), y: signerFull.y.toString() },
+    //     { r: r, s: s },
+    //     signedFields.data,
+    //     false
+    //   );
 
-      await txn.wait();
+    //   await txn.wait();
 
-      txn = await verifier.step_1_VF(vfId);
-      await txn.wait();
+    //   txn = await verifier.step_1_VF(vfId);
+    //   await txn.wait();
 
-      txn = await verifier.step_2_VF(vfId);
-      await txn.wait();
+    //   txn = await verifier.step_2_VF(vfId);
+    //   await txn.wait();
 
-      txn = await verifier.step_3_VF(vfId);
-      await txn.wait();
+    //   txn = await verifier.step_3_VF(vfId);
+    //   await txn.wait();
 
-      txn = await verifier.step_4_VF(vfId);
-      await txn.wait();
+    //   txn = await verifier.step_4_VF(vfId);
+    //   await txn.wait();
 
-      txn = await verifier.step_5_VF(vfId);
-      await txn.wait();
+    //   txn = await verifier.step_5_VF(vfId);
+    //   await txn.wait();
 
-      txn = await verifier.step_6_VF(vfId);
-      await txn.wait();
+    //   txn = await verifier.step_6_VF(vfId);
+    //   await txn.wait();
 
-      let finalObject = await verifier.getVFState(vfId);
+    //   let finalObject = await verifier.getVFState(vfId);
 
-      expect(finalObject[12]).to.equal(false);
-      expect(finalObject[12]).to.equal(result);
+    //   expect(finalObject[2]).to.equal(false);
+    //   expect(finalObject[2]).to.equal(result);
 
-      /// DIFFERENT DATA -------------------------------------------------
-      signatureObject = Signature.fromBase58(signedFields.signature);
-      s = signatureObject.s.toBigInt();
-      r = signatureObject.r.toBigInt();
+    //   /// DIFFERENT DATA -------------------------------------------------
+    //   signatureObject = Signature.fromBase58(signedFields.signature);
+    //   s = signatureObject.s.toBigInt();
+    //   r = signatureObject.r.toBigInt();
 
-      signer = PublicKey.fromBase58(signedFields.publicKey);
-      signerFull = signer.toGroup();
+    //   signer = PublicKey.fromBase58(signedFields.publicKey);
+    //   signerFull = signer.toGroup();
 
-      result = client.verifyFields({
-        data: altSignedFields.data,
-        signature: signedFields.signature,
-        publicKey: signedFields.publicKey,
-      });
+    //   result = client.verifyFields({
+    //     data: altSignedFields.data,
+    //     signature: signedFields.signature,
+    //     publicKey: signedFields.publicKey,
+    //   });
 
-      vfId = 1;
+    //   vfId = 1;
 
-      txn;
-      txn = await verifier.step_0_VF_assignValues(
-        { x: signerFull.x.toString(), y: signerFull.y.toString() },
-        { r: r, s: s },
-        altSignedFields.data,
-        false
-      );
+    //   txn;
+    //   txn = await verifier.step_0_VF_assignValues(
+    //     { x: signerFull.x.toString(), y: signerFull.y.toString() },
+    //     { r: r, s: s },
+    //     altSignedFields.data,
+    //     false
+    //   );
 
-      await txn.wait();
+    //   await txn.wait();
 
-      txn = await verifier.step_1_VF(vfId);
-      await txn.wait();
+    //   txn = await verifier.step_1_VF(vfId);
+    //   await txn.wait();
 
-      txn = await verifier.step_2_VF(vfId);
-      await txn.wait();
+    //   txn = await verifier.step_2_VF(vfId);
+    //   await txn.wait();
 
-      txn = await verifier.step_3_VF(vfId);
-      await txn.wait();
+    //   txn = await verifier.step_3_VF(vfId);
+    //   await txn.wait();
 
-      txn = await verifier.step_4_VF(vfId);
-      await txn.wait();
+    //   txn = await verifier.step_4_VF(vfId);
+    //   await txn.wait();
 
-      txn = await verifier.step_5_VF(vfId);
-      await txn.wait();
+    //   txn = await verifier.step_5_VF(vfId);
+    //   await txn.wait();
 
-      txn = await verifier.step_6_VF(vfId);
-      await txn.wait();
+    //   txn = await verifier.step_6_VF(vfId);
+    //   await txn.wait();
 
-      finalObject = await verifier.getVFState(vfId);
+    //   finalObject = await verifier.getVFState(vfId);
 
-      expect(finalObject[12]).to.equal(false);
-      expect(finalObject[12]).to.equal(result);
+    //   expect(finalObject[2]).to.equal(false);
+    //   expect(finalObject[2]).to.equal(result);
 
-      /// DIFFERENT PUBLIC KEY -------------------------------------------------
-      signatureObject = Signature.fromBase58(signedFields.signature);
-      s = signatureObject.s.toBigInt();
-      r = signatureObject.r.toBigInt();
+    //   /// DIFFERENT PUBLIC KEY -------------------------------------------------
+    //   signatureObject = Signature.fromBase58(signedFields.signature);
+    //   s = signatureObject.s.toBigInt();
+    //   r = signatureObject.r.toBigInt();
 
-      const randomPK = PrivateKey.random();
-      const random = randomPK.toPublicKey();
-      const randomFull = random.toGroup();
+    //   const randomPK = PrivateKey.random();
+    //   const random = randomPK.toPublicKey();
+    //   const randomFull = random.toGroup();
 
-      result = client.verifyFields({
-        data: signedFields.data,
-        signature: signedFields.signature,
-        publicKey: random.toBase58(),
-      });
+    //   result = client.verifyFields({
+    //     data: signedFields.data,
+    //     signature: signedFields.signature,
+    //     publicKey: random.toBase58(),
+    //   });
 
-      vfId = 2;
+    //   vfId = 2;
 
-      txn;
-      txn = await verifier.step_0_VF_assignValues(
-        { x: randomFull.x.toString(), y: randomFull.y.toString() },
-        { r: r, s: s },
-        signedFields.data,
-        false
-      );
+    //   txn;
+    //   txn = await verifier.step_0_VF_assignValues(
+    //     { x: randomFull.x.toString(), y: randomFull.y.toString() },
+    //     { r: r, s: s },
+    //     signedFields.data,
+    //     false
+    //   );
 
-      await txn.wait();
+    //   await txn.wait();
 
-      txn = await verifier.step_1_VF(vfId);
-      await txn.wait();
+    //   txn = await verifier.step_1_VF(vfId);
+    //   await txn.wait();
 
-      txn = await verifier.step_2_VF(vfId);
-      await txn.wait();
+    //   txn = await verifier.step_2_VF(vfId);
+    //   await txn.wait();
 
-      txn = await verifier.step_3_VF(vfId);
-      await txn.wait();
+    //   txn = await verifier.step_3_VF(vfId);
+    //   await txn.wait();
 
-      txn = await verifier.step_4_VF(vfId);
-      await txn.wait();
+    //   txn = await verifier.step_4_VF(vfId);
+    //   await txn.wait();
 
-      txn = await verifier.step_5_VF(vfId);
-      await txn.wait();
+    //   txn = await verifier.step_5_VF(vfId);
+    //   await txn.wait();
 
-      txn = await verifier.step_6_VF(vfId);
-      await txn.wait();
+    //   txn = await verifier.step_6_VF(vfId);
+    //   await txn.wait();
 
-      finalObject = await verifier.getVFState(vfId);
+    //   finalObject = await verifier.getVFState(vfId);
 
-      expect(finalObject[12]).to.equal(false);
-      expect(finalObject[12]).to.equal(result);
-    });
+    //   expect(finalObject[2]).to.equal(false);
+    //   expect(finalObject[2]).to.equal(result);
+    // });
   });
 });

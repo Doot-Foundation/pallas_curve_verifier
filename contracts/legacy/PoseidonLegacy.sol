@@ -11,6 +11,12 @@ import "hardhat/console.sol";
  */
 
 contract PoseidonLegacy is PallasCurveLegacy, PallasConstantsLegacy {
+    uint256 internal constant BITS_PER_FIELD = 254;
+    uint256 internal constant CODA_PREFIX_FIELD =
+        240717916736854602989207148466022993262069182275;
+    uint256 internal constant MINA_PREFIX_FIELD =
+        664504924603203994814403132056773144791042910541;
+
     struct HashInputLegacy {
         uint256[] fields;
         bool[] bits;
@@ -21,9 +27,9 @@ contract PoseidonLegacy is PallasCurveLegacy, PallasConstantsLegacy {
     /// @param x Base value
     /// @return uint256 Result of x^5
     function power5(uint256 x) internal pure returns (uint256) {
-        uint256 x2 = mulmod(x, x, FIELD_MODULUS); // x^2
-        uint256 x4 = mulmod(x2, x2, FIELD_MODULUS); // x^4
-        return mulmod(x4, x, FIELD_MODULUS); // x^5
+        uint256 x2 = mulmod(x, x, FIELD_MODULUS);
+        uint256 x4 = mulmod(x2, x2, FIELD_MODULUS);
+        return mulmod(x4, x, FIELD_MODULUS);
     }
 
     /// @notice Initial state array [0, 0, 0]
@@ -69,16 +75,36 @@ contract PoseidonLegacy is PallasCurveLegacy, PallasConstantsLegacy {
     function mdsMultiply(
         uint256[3] memory state
     ) internal view returns (uint256[3] memory result) {
-        for (uint256 i = 0; i < 3; i++) {
-            result[i] = 0;
-            for (uint256 j = 0; j < 3; j++) {
-                result[i] = addmod(
-                    result[i],
-                    mulmod(getMdsValue(i, j), state[j], FIELD_MODULUS),
-                    FIELD_MODULUS
-                );
-            }
-        }
+        // Unroll the loops for gas efficiency
+        result[0] = addmod(
+            addmod(
+                mulmod(getMdsValue(0, 0), state[0], FIELD_MODULUS),
+                mulmod(getMdsValue(0, 1), state[1], FIELD_MODULUS),
+                FIELD_MODULUS
+            ),
+            mulmod(getMdsValue(0, 2), state[2], FIELD_MODULUS),
+            FIELD_MODULUS
+        );
+
+        result[1] = addmod(
+            addmod(
+                mulmod(getMdsValue(1, 0), state[0], FIELD_MODULUS),
+                mulmod(getMdsValue(1, 1), state[1], FIELD_MODULUS),
+                FIELD_MODULUS
+            ),
+            mulmod(getMdsValue(1, 2), state[2], FIELD_MODULUS),
+            FIELD_MODULUS
+        );
+
+        result[2] = addmod(
+            addmod(
+                mulmod(getMdsValue(2, 0), state[0], FIELD_MODULUS),
+                mulmod(getMdsValue(2, 1), state[1], FIELD_MODULUS),
+                FIELD_MODULUS
+            ),
+            mulmod(getMdsValue(2, 2), state[2], FIELD_MODULUS),
+            FIELD_MODULUS
+        );
     }
 
     /// @notice Performs the Poseidon permutation
@@ -88,40 +114,40 @@ contract PoseidonLegacy is PallasCurveLegacy, PallasConstantsLegacy {
     function poseidonPermutation(
         uint256[3] memory state
     ) internal view returns (uint256[3] memory) {
-        uint256[3] memory currentState = state;
         uint256 offset = 0;
 
-        // Initial round constant if needed
         if (POSEIDON_HAS_INITIAL_ROUND_CONSTANT) {
-            for (uint256 i = 0; i < POSEIDON_STATE_SIZE; i++) {
-                currentState[i] = addmod(
-                    currentState[i],
-                    roundConstants[0][i],
-                    FIELD_MODULUS
-                );
-            }
+            state[0] = addmod(state[0], roundConstants[0][0], FIELD_MODULUS);
+            state[1] = addmod(state[1], roundConstants[0][1], FIELD_MODULUS);
+            state[2] = addmod(state[2], roundConstants[0][2], FIELD_MODULUS);
             offset = 1;
         }
 
-        // Main rounds
         for (uint256 round = 0; round < POSEIDON_FULL_ROUNDS; round++) {
-            // Power 5 operation using optimized power5
-            for (uint256 i = 0; i < POSEIDON_STATE_SIZE; i++) {
-                currentState[i] = power5(currentState[i]);
-            }
+            state[0] = power5(state[0]);
+            state[1] = power5(state[1]);
+            state[2] = power5(state[2]);
 
-            currentState = mdsMultiply(currentState);
+            state = mdsMultiply(state);
 
-            for (uint256 i = 0; i < POSEIDON_STATE_SIZE; i++) {
-                currentState[i] = addmod(
-                    currentState[i],
-                    getRoundConstant(round + offset, i),
-                    FIELD_MODULUS
-                );
-            }
+            state[0] = addmod(
+                state[0],
+                getRoundConstant(round + offset, 0),
+                FIELD_MODULUS
+            );
+            state[1] = addmod(
+                state[1],
+                getRoundConstant(round + offset, 1),
+                FIELD_MODULUS
+            );
+            state[2] = addmod(
+                state[2],
+                getRoundConstant(round + offset, 2),
+                FIELD_MODULUS
+            );
         }
 
-        return currentState;
+        return state;
     }
 
     /// @notice Updates hash state with input
@@ -137,24 +163,23 @@ contract PoseidonLegacy is PallasCurveLegacy, PallasConstantsLegacy {
             return poseidonPermutation(state);
         }
 
-        // Pad input with zeros to multiple of rate (matching JS)
         uint256 n = ((input.length + POSEIDON_RATE - 1) / POSEIDON_RATE) *
             POSEIDON_RATE;
         uint256[] memory paddedInput = new uint256[](n);
         for (uint256 i = 0; i < input.length; i++) {
             paddedInput[i] = input[i];
         }
-        // Rest are initialized to 0 by default
 
         for (
             uint256 blockIndex = 0;
             blockIndex < n;
             blockIndex += POSEIDON_RATE
         ) {
-            for (uint256 i = 0; i < POSEIDON_RATE; i++) {
-                state[i] = addmod(
-                    state[i],
-                    paddedInput[blockIndex + i],
+            state[0] = addmod(state[0], paddedInput[blockIndex], FIELD_MODULUS);
+            if (blockIndex + 1 < n) {
+                state[1] = addmod(
+                    state[1],
+                    paddedInput[blockIndex + 1],
                     FIELD_MODULUS
                 );
             }
@@ -175,10 +200,7 @@ contract PoseidonLegacy is PallasCurveLegacy, PallasConstantsLegacy {
 
         for (uint i = 0; i < strBytes.length; i++) {
             uint8 b = uint8(strBytes[i]);
-
-            // Convert to bits in JS order
             for (uint j = 0; j < 8; j++) {
-                // JavaScript does: false, true, false, true... for byte 84
                 bits[i * 8 + j] = (b & (1 << (7 - j))) != 0;
             }
         }
@@ -200,7 +222,6 @@ contract PoseidonLegacy is PallasCurveLegacy, PallasConstantsLegacy {
             for (uint8 bit = 0; bit < 8; bit++) {
                 uint256 bitIndex = i * 8 + bit;
                 if (bitIndex < bits.length && bits[bitIndex]) {
-                    // Match JS: x += BigInt(bytes[i]) << bitPosition
                     byteVal |= uint8(1 << bit);
                 }
             }
@@ -218,7 +239,6 @@ contract PoseidonLegacy is PallasCurveLegacy, PallasConstantsLegacy {
     ) internal pure returns (uint256) {
         uint256 result = 0;
         for (uint256 i = 0; i < b.length; i++) {
-            // Match JS: x += BigInt(bytes[i]) << bitPosition
             result += uint256(uint8(b[i])) << (i * 8);
         }
         return result % FIELD_MODULUS;
@@ -252,15 +272,12 @@ contract PoseidonLegacy is PallasCurveLegacy, PallasConstantsLegacy {
     function packToFieldsLegacy(
         HashInputLegacy memory input
     ) internal pure returns (uint256[] memory) {
-        uint256 BITS_PER_FIELD = 254; // sizeInBits - 1 as per JS
         uint256 numBitFields = (input.bits.length + BITS_PER_FIELD - 1) /
             BITS_PER_FIELD;
-
         uint256[] memory result = new uint256[](
             input.fields.length + numBitFields
         );
 
-        // Copy original fields first
         for (uint256 i = 0; i < input.fields.length; i++) {
             result[i] = input.fields[i];
         }
@@ -272,21 +289,13 @@ contract PoseidonLegacy is PallasCurveLegacy, PallasConstantsLegacy {
                 ? input.bits.length - bitsProcessed
                 : BITS_PER_FIELD;
 
-            // Create padded array of size BITS_PER_FIELD (exactly like JS)
             bool[] memory fieldBits = new bool[](BITS_PER_FIELD);
-            // Copy available bits
             for (uint256 j = 0; j < bitsToTake; j++) {
                 fieldBits[j] = input.bits[bitsProcessed + j];
             }
-            // Rest remains false (matching JS padding)
 
-            // Convert to bytes first (matching JS flow)
             bytes memory fieldBytes = bitsToBytes(fieldBits);
-
-            // Convert bytes to field element
-            uint256 fieldElement = bytesToFieldElement(fieldBytes);
-
-            result[input.fields.length + i] = fieldElement;
+            result[input.fields.length + i] = bytesToFieldElement(fieldBytes);
             bitsProcessed += bitsToTake;
         }
 
@@ -309,7 +318,6 @@ contract PoseidonLegacy is PallasCurveLegacy, PallasConstantsLegacy {
             input1.bits.length + input2.bits.length
         );
 
-        // Combine fields
         for (uint256 i = 0; i < input1.fields.length; i++) {
             combinedFields[i] = input1.fields[i];
         }
@@ -317,7 +325,6 @@ contract PoseidonLegacy is PallasCurveLegacy, PallasConstantsLegacy {
             combinedFields[input1.fields.length + i] = input2.fields[i];
         }
 
-        // Combine bits
         for (uint256 i = 0; i < input1.bits.length; i++) {
             combinedBits[i] = input1.bits[i];
         }
@@ -379,31 +386,40 @@ contract PoseidonLegacy is PallasCurveLegacy, PallasConstantsLegacy {
         uint256 r,
         string memory prefix
     ) internal view returns (uint256) {
-        // Create message input (only bits, no fields)
         HashInputLegacy memory messageInput = HashInputLegacy({
             fields: new uint256[](0),
             bits: stringToBits(message)
         });
 
-        // Create public key and r input (only fields, no bits)
         uint256[] memory pkFields = new uint256[](3);
         pkFields[0] = publicKey.x;
         pkFields[1] = publicKey.y;
         pkFields[2] = r;
+
         HashInputLegacy memory pkInput = HashInputLegacy({
             fields: pkFields,
             bits: new bool[](0)
         });
 
-        // Append the inputs
         HashInputLegacy memory fullInput = appendHashInputs(
             messageInput,
             pkInput
         );
-
-        // Pack fields exactly like JS
         uint256[] memory packedFields = packToFieldsLegacy(fullInput);
 
-        return poseidonLegacyHashWithPrefix(prefix, packedFields);
+        // Use cached prefix values
+        uint256 prefixField = keccak256(bytes(prefix)) ==
+            keccak256(bytes("MinaSignatureMainnet"))
+            ? MINA_PREFIX_FIELD
+            : CODA_PREFIX_FIELD;
+
+        uint256[] memory prefixArray = new uint256[](1);
+        prefixArray[0] = prefixField;
+
+        uint256[3] memory state = initialState();
+        state = update(state, prefixArray);
+        state = update(state, packedFields);
+
+        return state[0];
     }
 }

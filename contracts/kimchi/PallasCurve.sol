@@ -62,22 +62,33 @@ contract PallasCurve is PallasTypes {
     /// @param a Value to invert
     /// @return uint256 Modular multiplicative inverse of a
     function invmod(uint256 a) internal pure returns (uint256) {
-        require(a != 0, "Cannot invert 0");
+        if (a == 0) revert("Cannot invert 0");
 
-        int256 t = 0;
-        int256 newt = 1;
-        int256 r = int256(FIELD_MODULUS);
-        int256 newr = int256(a);
-        uint256 q;
+        uint256 t = 0;
+        uint256 newt = 1;
+        uint256 r = FIELD_MODULUS;
+        uint256 newr = a;
+        uint256 quotient;
+        uint256 temp;
 
-        while (newr != 0) {
-            q = uint256(r / newr);
-            (t, newt) = (newt, t - int256(q) * newt);
-            (r, newr) = (newr, r - int256(q) * newr);
+        unchecked {
+            while (newr != 0) {
+                quotient = r / newr;
+
+                temp = t;
+                t = newt;
+                newt = temp - quotient * newt;
+
+                temp = r;
+                r = newr;
+                newr = temp - quotient * newr;
+            }
+
+            if (t > FIELD_MODULUS) {
+                t += FIELD_MODULUS;
+            }
         }
-
-        if (t < 0) t += int256(FIELD_MODULUS);
-        return uint256(t);
+        return t;
     }
 
     /// @notice Performs modular exponentiation
@@ -237,50 +248,56 @@ contract PallasCurve is PallasTypes {
         if (g.z == 0) return g;
         if (g.y == 0) revert("Cannot double point with y=0");
 
-        // A = X1^2
-        uint256 A = mulmod(g.x, g.x, FIELD_MODULUS);
-        // B = Y1^2
-        uint256 B = mulmod(g.y, g.y, FIELD_MODULUS);
-        // C = B^2
-        uint256 C = mulmod(B, B, FIELD_MODULUS);
-        // D = 2*((X1+B)^2-A-C)
-        uint256 D = mulmod(
-            2,
-            addmod(
-                mulmod(
-                    addmod(g.x, B, FIELD_MODULUS),
-                    addmod(g.x, B, FIELD_MODULUS),
+        unchecked {
+            // Cache x, y, z values
+            uint256 x = g.x;
+            uint256 y = g.y;
+            uint256 z = g.z;
+
+            // A = X1^2
+            uint256 A = mulmod(x, x, FIELD_MODULUS);
+            // B = Y1^2
+            uint256 B = mulmod(y, y, FIELD_MODULUS);
+            // C = B^2
+            uint256 C = mulmod(B, B, FIELD_MODULUS);
+
+            // Cache X1+B
+            uint256 xPlusB = addmod(x, B, FIELD_MODULUS);
+            // D = 2*((X1+B)^2-A-C)
+            uint256 D = mulmod(
+                2,
+                addmod(
+                    mulmod(xPlusB, xPlusB, FIELD_MODULUS),
+                    FIELD_MODULUS - addmod(A, C, FIELD_MODULUS),
                     FIELD_MODULUS
                 ),
-                FIELD_MODULUS - addmod(A, C, FIELD_MODULUS),
                 FIELD_MODULUS
-            ),
-            FIELD_MODULUS
-        );
-        // E = 3*A
-        uint256 E = mulmod(3, A, FIELD_MODULUS);
-        // F = E^2
-        uint256 F = mulmod(E, E, FIELD_MODULUS);
-        // X3 = F-2*D
-        uint256 X3 = addmod(
-            F,
-            FIELD_MODULUS - mulmod(2, D, FIELD_MODULUS),
-            FIELD_MODULUS
-        );
-        // Y3 = E*(D-X3)-8*C
-        uint256 Y3 = addmod(
-            mulmod(
-                E,
-                addmod(D, FIELD_MODULUS - X3, FIELD_MODULUS),
-                FIELD_MODULUS
-            ),
-            FIELD_MODULUS - mulmod(8, C, FIELD_MODULUS),
-            FIELD_MODULUS
-        );
-        // Z3 = 2*Y1*Z1
-        uint256 Z3 = mulmod(2, mulmod(g.y, g.z, FIELD_MODULUS), FIELD_MODULUS);
+            );
 
-        return ProjectivePoint(X3, Y3, Z3);
+            // E = 3*A
+            uint256 E = mulmod(3, A, FIELD_MODULUS);
+            // F = E^2
+            uint256 F = mulmod(E, E, FIELD_MODULUS);
+
+            // Calculate final coordinates
+            uint256 X3 = addmod(
+                F,
+                FIELD_MODULUS - mulmod(2, D, FIELD_MODULUS),
+                FIELD_MODULUS
+            );
+            uint256 Y3 = addmod(
+                mulmod(
+                    E,
+                    addmod(D, FIELD_MODULUS - X3, FIELD_MODULUS),
+                    FIELD_MODULUS
+                ),
+                FIELD_MODULUS - mulmod(8, C, FIELD_MODULUS),
+                FIELD_MODULUS
+            );
+            uint256 Z3 = mulmod(2, mulmod(y, z, FIELD_MODULUS), FIELD_MODULUS);
+
+            return ProjectivePoint(X3, Y3, Z3);
+        }
     }
 
     /// @notice Adds two points in projective coordinates
@@ -295,85 +312,81 @@ contract PallasCurve is PallasTypes {
         if (g.z == 0) return h;
         if (h.z == 0) return g;
 
-        // Z1Z1 = Z1^2
-        uint256 Z1Z1 = mulmod(g.z, g.z, FIELD_MODULUS);
-        // Z2Z2 = Z2^2
-        uint256 Z2Z2 = mulmod(h.z, h.z, FIELD_MODULUS);
-        // U1 = X1*Z2Z2
-        uint256 U1 = mulmod(g.x, Z2Z2, FIELD_MODULUS);
-        // U2 = X2*Z1Z1
-        uint256 U2 = mulmod(h.x, Z1Z1, FIELD_MODULUS);
-        // S1 = Y1*Z2*Z2Z2
-        uint256 S1 = mulmod(
-            g.y,
-            mulmod(h.z, Z2Z2, FIELD_MODULUS),
-            FIELD_MODULUS
-        );
-        // S2 = Y2*Z1*Z1Z1
-        uint256 S2 = mulmod(
-            h.y,
-            mulmod(g.z, Z1Z1, FIELD_MODULUS),
-            FIELD_MODULUS
-        );
-        // H = U2-U1
-        uint256 H = addmod(U2, FIELD_MODULUS - U1, FIELD_MODULUS);
+        unchecked {
+            // Cache values
+            uint256 z1 = g.z;
+            uint256 z2 = h.z;
 
-        if (H == 0) {
-            if (S1 == S2) {
-                return projectiveDouble(g);
-            }
-            if (addmod(S1, S2, FIELD_MODULUS) == 0) {
-                return ProjectivePoint(1, 1, 0); // Point at infinity
-            }
-            revert("Invalid point addition");
-        }
-
-        // I = (2*H)^2
-        uint256 I = mulmod(mulmod(H, H, FIELD_MODULUS), 4, FIELD_MODULUS);
-        // J = H*I
-        uint256 J = mulmod(H, I, FIELD_MODULUS);
-        // r = 2*(S2-S1)
-        uint256 r = mulmod(
-            2,
-            addmod(S2, FIELD_MODULUS - S1, FIELD_MODULUS),
-            FIELD_MODULUS
-        );
-        // V = U1*I
-        uint256 V = mulmod(U1, I, FIELD_MODULUS);
-        // X3 = r^2-J-2*V
-        uint256 X3 = addmod(
-            mulmod(r, r, FIELD_MODULUS),
-            FIELD_MODULUS -
-                addmod(J, mulmod(2, V, FIELD_MODULUS), FIELD_MODULUS),
-            FIELD_MODULUS
-        );
-        // Y3 = r*(V-X3)-2*S1*J
-        uint256 Y3 = addmod(
-            mulmod(
-                r,
-                addmod(V, FIELD_MODULUS - X3, FIELD_MODULUS),
+            uint256 Z1Z1 = mulmod(z1, z1, FIELD_MODULUS);
+            uint256 Z2Z2 = mulmod(z2, z2, FIELD_MODULUS);
+            uint256 U1 = mulmod(g.x, Z2Z2, FIELD_MODULUS);
+            uint256 U2 = mulmod(h.x, Z1Z1, FIELD_MODULUS);
+            uint256 S1 = mulmod(
+                g.y,
+                mulmod(z2, Z2Z2, FIELD_MODULUS),
                 FIELD_MODULUS
-            ),
-            FIELD_MODULUS -
-                mulmod(2, mulmod(S1, J, FIELD_MODULUS), FIELD_MODULUS),
-            FIELD_MODULUS
-        );
-        // Z3 = ((Z1+Z2)^2-Z1Z1-Z2Z2)*H
-        uint256 Z3 = mulmod(
-            addmod(
+            );
+            uint256 S2 = mulmod(
+                h.y,
+                mulmod(z1, Z1Z1, FIELD_MODULUS),
+                FIELD_MODULUS
+            );
+            uint256 H = addmod(U2, FIELD_MODULUS - U1, FIELD_MODULUS);
+
+            if (H == 0) {
+                if (S1 == S2) {
+                    return projectiveDouble(g);
+                }
+                if (addmod(S1, S2, FIELD_MODULUS) == 0) {
+                    return ProjectivePoint(1, 1, 0);
+                }
+                revert("Invalid point addition");
+            }
+
+            // Rest of calculations in one unchecked block for gas savings
+            uint256 I = mulmod(mulmod(H, H, FIELD_MODULUS), 4, FIELD_MODULUS);
+            uint256 J = mulmod(H, I, FIELD_MODULUS);
+            uint256 r = mulmod(
+                2,
+                addmod(S2, FIELD_MODULUS - S1, FIELD_MODULUS),
+                FIELD_MODULUS
+            );
+            uint256 V = mulmod(U1, I, FIELD_MODULUS);
+
+            uint256 X3 = addmod(
+                mulmod(r, r, FIELD_MODULUS),
+                FIELD_MODULUS -
+                    addmod(J, mulmod(2, V, FIELD_MODULUS), FIELD_MODULUS),
+                FIELD_MODULUS
+            );
+
+            uint256 Y3 = addmod(
                 mulmod(
-                    addmod(g.z, h.z, FIELD_MODULUS),
-                    addmod(g.z, h.z, FIELD_MODULUS),
+                    r,
+                    addmod(V, FIELD_MODULUS - X3, FIELD_MODULUS),
                     FIELD_MODULUS
                 ),
-                FIELD_MODULUS - addmod(Z1Z1, Z2Z2, FIELD_MODULUS),
+                FIELD_MODULUS -
+                    mulmod(2, mulmod(S1, J, FIELD_MODULUS), FIELD_MODULUS),
                 FIELD_MODULUS
-            ),
-            H,
-            FIELD_MODULUS
-        );
+            );
 
-        return ProjectivePoint(X3, Y3, Z3);
+            uint256 Z3 = mulmod(
+                addmod(
+                    mulmod(
+                        addmod(z1, z2, FIELD_MODULUS),
+                        addmod(z1, z2, FIELD_MODULUS),
+                        FIELD_MODULUS
+                    ),
+                    FIELD_MODULUS - addmod(Z1Z1, Z2Z2, FIELD_MODULUS),
+                    FIELD_MODULUS
+                ),
+                H,
+                FIELD_MODULUS
+            );
+
+            return ProjectivePoint(X3, Y3, Z3);
+        }
     }
 
     /// @notice Adds two points in affine coordinates

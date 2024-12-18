@@ -20,16 +20,14 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy {
         bool init;
         /// @notice Network flag - true for mainnet, false for testnet
         bool mainnet;
+        /// @notice Final verification result
+        bool isValid;
         /// @notice Tracks the current step of verification (0-6)
         uint8 atStep;
         /// @notice The public key point (x,y) being verified against
         Point publicKey;
         /// @notice The signature containing r (x-coordinate) and s (scalar)
         Signature signature;
-        /// @notice The message being verified
-        string message;
-        /// @notice Network-specific prefix for message hashing
-        string prefix;
         /// @notice Stores the computed hash of the message
         uint256 messageHash;
         /// @notice Public key converted to group form
@@ -40,8 +38,10 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy {
         Point ePk;
         /// @notice Final computed point R = sG - ePk
         Point R;
-        /// @notice Final verification result
-        bool isValid;
+        /// @notice The message being verified
+        string message;
+        /// @notice Network-specific prefix for message hashing
+        string prefix;
     }
 
     /// @notice Counter for tracking total number of verification processes
@@ -59,14 +59,14 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy {
     /// @notice Ensures only the creator of a verification process can access it
     /// @param id The verification process ID
     modifier isVMCreator(uint256 id) {
-        require(msg.sender == vmLifeCycleCreator[id]);
+        if (msg.sender != vmLifeCycleCreator[id]) revert();
         _;
     }
 
     /// @notice Ensures the verification ID exists
     /// @param id The verification process ID to check
     modifier isValidVMId(uint256 id) {
-        require(id < vmCounter);
+        if (id >= vmCounter) revert();
         _;
     }
 
@@ -84,8 +84,7 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy {
     function getVMState(
         uint256 vmId
     ) external view returns (VerifyMessageState memory state) {
-        VerifyMessageState storage returnedState = vmLifeCycle[vmId];
-        return returnedState;
+        return vmLifeCycle[vmId];
     }
 
     /// @notice Validates if a point lies on the Pallas curve
@@ -93,17 +92,14 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy {
     /// @param point The point to validate with x and y coordinates
     /// @return bool True if the point lies on the curve, false otherwise
     function isValidPublicKey(Point memory point) public pure returns (bool) {
-        // Check if coordinates are within valid field range
         if (point.x >= FIELD_MODULUS || point.y >= FIELD_MODULUS) {
             return false;
         }
 
-        // Verify y² = x³ + 5
-        uint256 lhs = mulmod(point.y, point.y, FIELD_MODULUS);
         uint256 x2 = mulmod(point.x, point.x, FIELD_MODULUS);
-        uint256 x3 = mulmod(x2, point.x, FIELD_MODULUS);
-        uint256 rhs = addmod(x3, 5, FIELD_MODULUS);
-        return lhs == rhs;
+        uint256 lhs = mulmod(point.y, point.y, FIELD_MODULUS);
+        return
+            lhs == addmod(mulmod(x2, point.x, FIELD_MODULUS), 5, FIELD_MODULUS);
     }
 
     /// @notice Zero step - Input assignment for message verification
@@ -155,14 +151,18 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy {
         if (current.atStep != 0) revert StepSkipped();
         if (!current.init) revert("Not initialized");
 
-        uint256 _messageHash = hashMessageLegacy(
-            current.message,
-            current.publicKey,
-            current.signature.r,
-            current.prefix
-        );
-        current.messageHash = _messageHash;
+        // Cache values to reduce storage reads
+        string memory message = current.message;
+        Point memory publicKey = current.publicKey;
+        uint256 sigR = current.signature.r;
+        string memory prefix = current.prefix;
 
+        current.messageHash = hashMessageLegacy(
+            message,
+            publicKey,
+            sigR,
+            prefix
+        );
         current.atStep = 1;
     }
 
@@ -179,14 +179,12 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy {
         VerifyMessageState storage current = vmLifeCycle[vmId];
         if (current.atStep != 1) revert StepSkipped();
 
-        // Create compressed point format from public key
-        PointCompressed memory compressed = PointCompressed({
-            x: current.publicKey.x,
-            isOdd: (current.publicKey.y % 2 == 1)
-        });
+        uint256 pubKeyX = current.publicKey.x;
+        uint256 pubKeyY = current.publicKey.y;
 
-        // Convert to group point
-        current.pkInGroup = _defaultToGroup(compressed);
+        current.pkInGroup = _defaultToGroup(
+            PointCompressed({x: pubKeyX, isOdd: (pubKeyY & 1 == 1)})
+        );
 
         current.atStep = 2;
     }
@@ -204,10 +202,8 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy {
         VerifyMessageState storage current = vmLifeCycle[vmId];
         if (current.atStep != 2) revert StepSkipped();
 
-        // Calculate s*G where G is generator point
-        Point memory G = Point(G_X, G_Y); // From PallasConstants
+        Point memory G = Point(G_X, G_Y);
         current.sG = scalarMul(G, current.signature.s);
-
         current.atStep = 3;
     }
 
@@ -222,9 +218,10 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy {
         VerifyMessageState storage current = vmLifeCycle[vmId];
         if (current.atStep != 3) revert StepSkipped();
 
-        // Calculate e*pkInGroup where e is the message hash
-        current.ePk = scalarMul(current.pkInGroup, current.messageHash);
+        Point memory pkInGroup = current.pkInGroup;
+        uint256 messageHash = current.messageHash;
 
+        current.ePk = scalarMul(pkInGroup, messageHash);
         current.atStep = 4;
     }
 
@@ -239,12 +236,12 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy {
         VerifyMessageState storage current = vmLifeCycle[vmId];
         if (current.atStep != 4) revert StepSkipped();
 
-        // R = sG - ePk
-        current.R = addPoints(
-            current.sG,
-            Point(current.ePk.x, FIELD_MODULUS - current.ePk.y) // Negate ePk.y to subtract
-        );
+        uint256 negY;
+        unchecked {
+            negY = FIELD_MODULUS - current.ePk.y;
+        }
 
+        current.R = addPoints(current.sG, Point(current.ePk.x, negY));
         current.atStep = 5;
     }
 
@@ -262,12 +259,10 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy {
         VerifyMessageState storage current = vmLifeCycle[vmId];
         if (current.atStep != 5) revert StepSkipped();
 
-        // Final verification:
-        // 1. Check R.x equals signature.r
-        // 2. Check R.y is even
-        current.isValid =
-            (current.R.x == current.signature.r) &&
-            isEven(current.R.y);
+        Point memory R = current.R;
+        uint256 sigR = current.signature.r;
+
+        current.isValid = (R.x == sigR) && (R.y & 1 == 0);
         current.atStep = 6;
 
         return current.isValid;
@@ -284,20 +279,15 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy {
     function _defaultToGroup(
         PointCompressed memory compressed
     ) internal view returns (Point memory) {
-        uint256 _x = compressed.x; // x stays the same
+        uint256 _x = compressed.x;
 
-        // Calculate y² = x³ + 5
         uint256 x2 = mulmod(_x, _x, FIELD_MODULUS);
-        uint256 x3 = mulmod(x2, _x, FIELD_MODULUS);
-        uint256 y2 = addmod(x3, BEQ, FIELD_MODULUS); // B is 5 for Pallas
+        uint256 y2 = addmod(mulmod(x2, _x, FIELD_MODULUS), BEQ, FIELD_MODULUS);
 
-        // Find square root
         uint256 _y = sqrtmod(y2, FIELD_MODULUS);
 
-        // Check if we need to negate y based on isOdd
-        bool computedIsOdd = (_y % 2 == 1);
-        if (computedIsOdd != compressed.isOdd) {
-            _y = FIELD_MODULUS - _y; // Negate y
+        if ((_y & 1 == 1) != compressed.isOdd) {
+            _y = FIELD_MODULUS - _y;
         }
 
         return Point({x: _x, y: _y});
