@@ -23,7 +23,7 @@ describe("PallasFieldsSignatureVerifier", function () {
       const { verifier } = await loadFixture(deployVerifierFixture);
 
       // Setup mina-signer
-      const client = new Client({ network: "mainnet" });
+      const client = new Client({ network: "testnet" });
 
       // const keypair = client.genKeys();
       const keypair = {
@@ -195,162 +195,162 @@ describe("PallasFieldsSignatureVerifier", function () {
       expect(finalObject[2]).to.equal(result);
       expect(finalObject[2]).to.equal(true);
     });
-    // it("Should return isValid=false in case invalid.", async function () {
-    //   const { verifier, signedFields, altSignedFields, client } =
-    //     await loadFixture(deployAndSetupFields);
+    it("Should return isValid=false in case invalid.", async function () {
+      const { verifier, signedFields, altSignedFields, client } =
+        await loadFixture(deployAndSetupFields);
 
-    //   /// 3 TEST CASES : signedFields is our original object.
-    //   ///   1. DIFFERENT SIGNATURE
-    //   ///   2. DIFFERENT DATA
-    //   ///   3. DIFFERENT PUBLIC KEY
+      /// 3 TEST CASES : signedFields is our original object.
+      ///   1. DIFFERENT SIGNATURE
+      ///   2. DIFFERENT DATA
+      ///   3. DIFFERENT PUBLIC KEY
 
-    //   /// DIFFERENT SIGNATURE -------------------------------------------------
-    //   let signatureObject = Signature.fromBase58(altSignedFields.signature);
-    //   let s = signatureObject.s.toBigInt();
-    //   let r = signatureObject.r.toBigInt();
+      /// DIFFERENT SIGNATURE -------------------------------------------------
+      let signatureObject = Signature.fromBase58(altSignedFields.signature);
+      let s = signatureObject.s.toBigInt();
+      let r = signatureObject.r.toBigInt();
 
-    //   let signer = PublicKey.fromBase58(signedFields.publicKey);
-    //   let signerFull = signer.toGroup();
+      let signer = PublicKey.fromBase58(signedFields.publicKey);
+      let signerFull = signer.toGroup();
 
-    //   let result = client.verifyFields({
-    //     data: signedFields.data,
-    //     signature: altSignedFields.signature,
-    //     publicKey: signedFields.publicKey,
-    //   });
+      let result = client.verifyFields({
+        data: signedFields.data,
+        signature: altSignedFields.signature,
+        publicKey: signedFields.publicKey,
+      });
 
-    //   let vfId = 0;
+      let vfId = 0;
 
-    //   let txn;
-    //   txn = await verifier.step_0_VF_assignValues(
-    //     { x: signerFull.x.toString(), y: signerFull.y.toString() },
-    //     { r: r, s: s },
-    //     signedFields.data,
-    //     false
-    //   );
+      let txn;
+      txn = await verifier.step_0_VF_assignValues(
+        { x: signerFull.x.toString(), y: signerFull.y.toString() },
+        { r: r, s: s },
+        signedFields.data,
+        false
+      );
 
-    //   await txn.wait();
+      await txn.wait();
 
-    //   txn = await verifier.step_1_VF(vfId);
-    //   await txn.wait();
+      txn = await verifier.step_1_VF(vfId);
+      await txn.wait();
 
-    //   txn = await verifier.step_2_VF(vfId);
-    //   await txn.wait();
+      txn = await verifier.step_2_VF(vfId);
+      await txn.wait();
 
-    //   txn = await verifier.step_3_VF(vfId);
-    //   await txn.wait();
+      txn = await verifier.step_3_VF(vfId);
+      await txn.wait();
 
-    //   txn = await verifier.step_4_VF(vfId);
-    //   await txn.wait();
+      txn = await verifier.step_4_VF(vfId);
+      await txn.wait();
 
-    //   txn = await verifier.step_5_VF(vfId);
-    //   await txn.wait();
+      txn = await verifier.step_5_VF(vfId);
+      await txn.wait();
 
-    //   txn = await verifier.step_6_VF(vfId);
-    //   await txn.wait();
+      txn = await verifier.step_6_VF(vfId);
+      await txn.wait();
 
-    //   let finalObject = await verifier.getVFState(vfId);
+      let finalObject = await verifier.getVFState(vfId);
 
-    //   expect(finalObject[2]).to.equal(false);
-    //   expect(finalObject[2]).to.equal(result);
+      expect(finalObject[2]).to.equal(false);
+      expect(finalObject[2]).to.equal(result);
 
-    //   /// DIFFERENT DATA -------------------------------------------------
-    //   signatureObject = Signature.fromBase58(signedFields.signature);
-    //   s = signatureObject.s.toBigInt();
-    //   r = signatureObject.r.toBigInt();
+      /// DIFFERENT DATA -------------------------------------------------
+      signatureObject = Signature.fromBase58(signedFields.signature);
+      s = signatureObject.s.toBigInt();
+      r = signatureObject.r.toBigInt();
 
-    //   signer = PublicKey.fromBase58(signedFields.publicKey);
-    //   signerFull = signer.toGroup();
+      signer = PublicKey.fromBase58(signedFields.publicKey);
+      signerFull = signer.toGroup();
 
-    //   result = client.verifyFields({
-    //     data: altSignedFields.data,
-    //     signature: signedFields.signature,
-    //     publicKey: signedFields.publicKey,
-    //   });
+      result = client.verifyFields({
+        data: altSignedFields.data,
+        signature: signedFields.signature,
+        publicKey: signedFields.publicKey,
+      });
 
-    //   vfId = 1;
+      vfId = 1;
 
-    //   txn;
-    //   txn = await verifier.step_0_VF_assignValues(
-    //     { x: signerFull.x.toString(), y: signerFull.y.toString() },
-    //     { r: r, s: s },
-    //     altSignedFields.data,
-    //     false
-    //   );
+      txn;
+      txn = await verifier.step_0_VF_assignValues(
+        { x: signerFull.x.toString(), y: signerFull.y.toString() },
+        { r: r, s: s },
+        altSignedFields.data,
+        false
+      );
 
-    //   await txn.wait();
+      await txn.wait();
 
-    //   txn = await verifier.step_1_VF(vfId);
-    //   await txn.wait();
+      txn = await verifier.step_1_VF(vfId);
+      await txn.wait();
 
-    //   txn = await verifier.step_2_VF(vfId);
-    //   await txn.wait();
+      txn = await verifier.step_2_VF(vfId);
+      await txn.wait();
 
-    //   txn = await verifier.step_3_VF(vfId);
-    //   await txn.wait();
+      txn = await verifier.step_3_VF(vfId);
+      await txn.wait();
 
-    //   txn = await verifier.step_4_VF(vfId);
-    //   await txn.wait();
+      txn = await verifier.step_4_VF(vfId);
+      await txn.wait();
 
-    //   txn = await verifier.step_5_VF(vfId);
-    //   await txn.wait();
+      txn = await verifier.step_5_VF(vfId);
+      await txn.wait();
 
-    //   txn = await verifier.step_6_VF(vfId);
-    //   await txn.wait();
+      txn = await verifier.step_6_VF(vfId);
+      await txn.wait();
 
-    //   finalObject = await verifier.getVFState(vfId);
+      finalObject = await verifier.getVFState(vfId);
 
-    //   expect(finalObject[2]).to.equal(false);
-    //   expect(finalObject[2]).to.equal(result);
+      expect(finalObject[2]).to.equal(false);
+      expect(finalObject[2]).to.equal(result);
 
-    //   /// DIFFERENT PUBLIC KEY -------------------------------------------------
-    //   signatureObject = Signature.fromBase58(signedFields.signature);
-    //   s = signatureObject.s.toBigInt();
-    //   r = signatureObject.r.toBigInt();
+      /// DIFFERENT PUBLIC KEY -------------------------------------------------
+      signatureObject = Signature.fromBase58(signedFields.signature);
+      s = signatureObject.s.toBigInt();
+      r = signatureObject.r.toBigInt();
 
-    //   const randomPK = PrivateKey.random();
-    //   const random = randomPK.toPublicKey();
-    //   const randomFull = random.toGroup();
+      const randomPK = PrivateKey.random();
+      const random = randomPK.toPublicKey();
+      const randomFull = random.toGroup();
 
-    //   result = client.verifyFields({
-    //     data: signedFields.data,
-    //     signature: signedFields.signature,
-    //     publicKey: random.toBase58(),
-    //   });
+      result = client.verifyFields({
+        data: signedFields.data,
+        signature: signedFields.signature,
+        publicKey: random.toBase58(),
+      });
 
-    //   vfId = 2;
+      vfId = 2;
 
-    //   txn;
-    //   txn = await verifier.step_0_VF_assignValues(
-    //     { x: randomFull.x.toString(), y: randomFull.y.toString() },
-    //     { r: r, s: s },
-    //     signedFields.data,
-    //     false
-    //   );
+      txn;
+      txn = await verifier.step_0_VF_assignValues(
+        { x: randomFull.x.toString(), y: randomFull.y.toString() },
+        { r: r, s: s },
+        signedFields.data,
+        false
+      );
 
-    //   await txn.wait();
+      await txn.wait();
 
-    //   txn = await verifier.step_1_VF(vfId);
-    //   await txn.wait();
+      txn = await verifier.step_1_VF(vfId);
+      await txn.wait();
 
-    //   txn = await verifier.step_2_VF(vfId);
-    //   await txn.wait();
+      txn = await verifier.step_2_VF(vfId);
+      await txn.wait();
 
-    //   txn = await verifier.step_3_VF(vfId);
-    //   await txn.wait();
+      txn = await verifier.step_3_VF(vfId);
+      await txn.wait();
 
-    //   txn = await verifier.step_4_VF(vfId);
-    //   await txn.wait();
+      txn = await verifier.step_4_VF(vfId);
+      await txn.wait();
 
-    //   txn = await verifier.step_5_VF(vfId);
-    //   await txn.wait();
+      txn = await verifier.step_5_VF(vfId);
+      await txn.wait();
 
-    //   txn = await verifier.step_6_VF(vfId);
-    //   await txn.wait();
+      txn = await verifier.step_6_VF(vfId);
+      await txn.wait();
 
-    //   finalObject = await verifier.getVFState(vfId);
+      finalObject = await verifier.getVFState(vfId);
 
-    //   expect(finalObject[2]).to.equal(false);
-    //   expect(finalObject[2]).to.equal(result);
-    // });
+      expect(finalObject[2]).to.equal(false);
+      expect(finalObject[2]).to.equal(result);
+    });
   });
 });

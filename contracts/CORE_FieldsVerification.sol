@@ -326,53 +326,50 @@ contract PallasFieldsSignatureVerifier is Poseidon {
     }
 
     // -------------- Functions for bridging -------------------------------------------------------
+    // Original Data → optimize() → Optimized Data → pack() → Bytes for Transmission
+    // (FieldsVerification) → (OptimizedFieldsVerification) → (bytes)
 
+    /// @notice LayerZero message version
     uint16 private constant VERSION = 1;
+
+    /// @notice Default gas limit for optimistic execution on destination chain
     uint256 private constant OPTIMISTIC_GAS = 100000;
 
+    /// @notice Emitted when a verification is sent cross-chain
+    /// @param payloadHash The keccak256 hash of the sent payload
+    /// @param isFieldVerification True if this is a field verification, false if message verification
     event SingleVerificationSent(
         bytes32 indexed payloadHash,
         bool isFieldVerification
     );
-    event BatchSent(bytes32 indexed batchId, uint16 verificationCount);
 
+    /// @notice Converts a standard FieldsVerification into an optimized format for cross-chain transmission
+    /// @param original The original FieldsVerification struct to optimize
+    /// @return An OptimizedFieldsVerification struct with compressed data
     function optimizeFieldsVerification(
         FieldsVerification memory original
     ) internal pure returns (OptimizedFieldsVerification memory) {
         OptimizedFieldsVerification memory optimized;
 
-        // Copy boolean
         optimized.isValid = original.isValid;
 
-        // Convert uint256[] to bytes32[]
         optimized.fields = new bytes32[](original.fields.length);
         for (uint256 i = 0; i < original.fields.length; i++) {
             optimized.fields[i] = bytes32(original.fields[i]);
         }
 
-        // Convert Signature to OptimizedSignature
         optimized.signature.r = bytes32(original.signature.r);
         optimized.signature.s = bytes32(original.signature.s);
 
-        // Convert Point to OptimizedPoint
         optimized.publicKey.x = bytes32(original.publicKey.x);
         optimized.publicKey.y = bytes32(original.publicKey.y);
 
         return optimized;
     }
 
-    // Single Field Verification
-    function sendSingleFieldsVerification(
-        uint16 dstChainId,
-        address receiver,
-        OptimizedFieldsVerification calldata verification
-    ) external payable {
-        bytes memory payload = packSingleFieldsVerification(verification);
-        _sendPayload(dstChainId, receiver, payload, OPTIMISTIC_GAS);
-        emit SingleVerificationSent(keccak256(payload), true);
-    }
-
-    // Packing Functions
+    /// @notice Packs a field verification into bytes for cross-chain transmission
+    /// @param verification The optimized verification struct to pack
+    /// @return The packed bytes with a type identifier (1) followed by the verification data
     function packSingleFieldsVerification(
         OptimizedFieldsVerification memory verification
     ) internal pure returns (bytes memory) {
@@ -389,6 +386,29 @@ contract PallasFieldsSignatureVerifier is Poseidon {
             );
     }
 
+    /// @notice Sends a single field verification to another chain via LayerZero
+    /// @param dstChainId The destination chain ID in LayerZero
+    /// @param receiver The address of the receiving contract on the destination chain
+    /// @param verification The verification data to send
+    /// @dev Requires msg.value to cover LayerZero fees
+    function sendSingleFieldsVerification(
+        uint16 dstChainId,
+        address receiver,
+        FieldsVerification calldata verification
+    ) external payable {
+        OptimizedFieldsVerification
+            memory optimized = optimizeFieldsVerification(verification);
+        bytes memory payload = packSingleFieldsVerification(optimized);
+        _sendPayload(dstChainId, receiver, payload, OPTIMISTIC_GAS);
+        emit SingleVerificationSent(keccak256(payload), true);
+    }
+
+    /// @notice Internal function to send payload through LayerZero
+    /// @param dstChainId The destination chain ID in LayerZero
+    /// @param receiver The address of the receiving contract
+    /// @param payload The encoded data to send
+    /// @param gasLimit Gas limit for execution on destination chain
+    /// @dev Uses VERSION for adapter parameters and optimistic execution
     function _sendPayload(
         uint16 dstChainId,
         address receiver,

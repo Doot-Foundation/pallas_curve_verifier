@@ -299,38 +299,56 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy {
     }
 
     // -------------- Functions for bridging -------------------------------------------------------
+    // Original Data (MessageVerification) → optimize() →
+    // Optimized Data (OptimizedMessageVerification/OptimizedOriginalMessageVerification) →
+    // pack() → Bytes for Transmission
 
+    // Two paths:
+    // 1. With hashing: MessageVerification → optimizeMessageVerification → OptimizedMessageVerification (hashed) →
+    //    packSingleMessageVerification → bytes
+    // 2. Without hashing: MessageVerification → optimizeOriginalMessageVerification →
+    //    OptimizedOriginalMessageVerification (original string) → packSingleOriginalMessageVerification → bytes
+
+    /// @notice LayerZero message version
     uint16 private constant VERSION = 1;
+
+    /// @notice Default gas limit for optimistic execution on destination chain
     uint256 private constant OPTIMISTIC_GAS = 100000;
 
+    /// @notice Emitted when a verification is sent cross-chain
+    /// @param payloadHash The keccak256 hash of the sent payload
+    /// @param isFieldVerification True if this is a field verification, false if message verification
     event SingleVerificationSent(
         bytes32 indexed payloadHash,
         bool isFieldVerification
     );
 
+    /// @notice Converts a MessageVerification into an optimized format using message hashing
+    /// @param original The original MessageVerification struct to optimize
+    /// @return Optimized verification struct with hashed message
+    /// @dev Hashes the message string to bytes32 for gas optimization
     function optimizeMessageVerification(
         MessageVerification memory original
     ) internal pure returns (OptimizedMessageVerification memory) {
         OptimizedMessageVerification memory optimized;
 
-        // Copy boolean
         optimized.isValid = original.isValid;
 
-        // Convert string message to bytes32 messageHash using keccak256
         optimized.messageHash = keccak256(bytes(original.message));
 
-        // Convert Signature to OptimizedSignature
         optimized.signature.r = bytes32(original.signature.r);
         optimized.signature.s = bytes32(original.signature.s);
 
-        // Convert Point to OptimizedPoint
         optimized.publicKey.x = bytes32(original.publicKey.x);
         optimized.publicKey.y = bytes32(original.publicKey.y);
 
         return optimized;
     }
 
-    // Helper function to convert from MessageVerification to OptimizedOriginalMessageVerification
+    /// @notice Converts a MessageVerification into an optimized format keeping original string
+    /// @param original The original MessageVerification struct to optimize
+    /// @return Optimized verification struct with original message string
+    /// @dev Preserves the original message string, higher gas cost but maintains readability
     function optimizeOriginalMessageVerification(
         MessageVerification memory original
     ) internal pure returns (OptimizedOriginalMessageVerification memory) {
@@ -339,39 +357,19 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy {
         optimized.isValid = original.isValid;
         optimized.message = original.message; // Keep original string
 
-        // Convert Signature to OptimizedSignature
         optimized.signature.r = bytes32(original.signature.r);
         optimized.signature.s = bytes32(original.signature.s);
 
-        // Convert Point to OptimizedPoint
         optimized.publicKey.x = bytes32(original.publicKey.x);
         optimized.publicKey.y = bytes32(original.publicKey.y);
 
         return optimized;
-    } // Single Message Verification
-
-    function sendSingleMessageVerification(
-        uint16 dstChainId,
-        address receiver,
-        OptimizedMessageVerification calldata verification
-    ) external payable {
-        bytes memory payload = packSingleMessageVerification(verification);
-        _sendPayload(dstChainId, receiver, payload, OPTIMISTIC_GAS);
-        emit SingleVerificationSent(keccak256(payload), false);
     }
 
-    function sendSingleOriginalMessageVerification(
-        uint16 dstChainId,
-        address receiver,
-        OptimizedOriginalMessageVerification calldata verification
-    ) external payable {
-        bytes memory payload = packSingleOriginalMessageVerification(
-            verification
-        );
-        _sendPayload(dstChainId, receiver, payload, OPTIMISTIC_GAS);
-        emit SingleVerificationSent(keccak256(payload), false);
-    }
-
+    /// @notice Packs a hashed message verification into bytes for cross-chain transmission
+    /// @param verification The optimized verification struct with hashed message
+    /// @return The packed bytes with type identifier (2) and verification data
+    /// @dev Used for gas-optimized message transmission
     function packSingleMessageVerification(
         OptimizedMessageVerification memory verification
     ) internal pure returns (bytes memory) {
@@ -387,6 +385,10 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy {
             );
     }
 
+    /// @notice Packs an original message verification into bytes for cross-chain transmission
+    /// @param verification The optimized verification struct with original message
+    /// @return The packed bytes with type identifier (3), message length, and verification data
+    /// @dev Includes string length for proper decoding on receiver side
     function packSingleOriginalMessageVerification(
         OptimizedOriginalMessageVerification memory verification
     ) internal pure returns (bytes memory) {
@@ -394,7 +396,7 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy {
             abi.encodePacked(
                 uint8(3), // new type identifier for original message verification
                 verification.isValid,
-                bytes(verification.message).length, // string length
+                bytes(verification.message).length,
                 verification.message,
                 verification.signature.r,
                 verification.signature.s,
@@ -403,6 +405,48 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy {
             );
     }
 
+    /// @notice Sends a message verification with hashed message cross-chain
+    /// @param dstChainId The destination chain ID in LayerZero
+    /// @param receiver The address of the receiving contract
+    /// @param verification The verification data to send
+    /// @dev Uses message hashing for gas optimization, requires msg.value for LZ fees
+    function sendSingleMessageVerification(
+        uint16 dstChainId,
+        address receiver,
+        MessageVerification calldata verification
+    ) external payable {
+        OptimizedMessageVerification
+            memory optimized = optimizeMessageVerification(verification);
+        bytes memory payload = packSingleMessageVerification(optimized);
+        _sendPayload(dstChainId, receiver, payload, OPTIMISTIC_GAS);
+        emit SingleVerificationSent(keccak256(payload), false);
+    }
+
+    /// @notice Sends a message verification with original string cross-chain
+    /// @param dstChainId The destination chain ID in LayerZero
+    /// @param receiver The address of the receiving contract
+    /// @param verification The verification data to send
+    /// @dev Preserves original message string, higher gas cost, requires msg.value for LZ fees
+    function sendSingleOriginalMessageVerification(
+        uint16 dstChainId,
+        address receiver,
+        MessageVerification calldata verification
+    ) external payable {
+        OptimizedOriginalMessageVerification
+            memory optimized = optimizeOriginalMessageVerification(
+                verification
+            );
+        bytes memory payload = packSingleOriginalMessageVerification(optimized);
+        _sendPayload(dstChainId, receiver, payload, OPTIMISTIC_GAS);
+        emit SingleVerificationSent(keccak256(payload), false);
+    }
+
+    /// @notice Internal function to send payload through LayerZero
+    /// @param dstChainId The destination chain ID in LayerZero
+    /// @param receiver The address of the receiving contract
+    /// @param payload The encoded data to send
+    /// @param gasLimit Gas limit for execution on destination chain
+    /// @dev Configures adapter parameters and handles LZ endpoint interaction
     function _sendPayload(
         uint16 dstChainId,
         address receiver,
