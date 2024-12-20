@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "./legacy/PoseidonLegacy.sol";
+import {ILayerZeroEndpoint, ILayerZeroReceiver} from "./interfaces/ILayerZero.sol";
 
 error InvalidPublicKey();
 error StepSkipped();
@@ -12,6 +13,10 @@ error StepSkipped();
  */
 
 contract PallasMessageSignatureVerifier is PoseidonLegacy {
+    address l1Contract;
+    uint16 public constant ETH_CHAIN_ID = 1;
+    ILayerZeroEndpoint public endpoint;
+
     /// @title Verification Message State Structure
     /// @notice Holds the state for message signature verification process
     /// @dev Used to track the progress and store intermediate results during verification
@@ -291,5 +296,128 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy {
         }
 
         return Point({x: _x, y: _y});
+    }
+
+    // -------------- Functions for bridging -------------------------------------------------------
+
+    uint16 private constant VERSION = 1;
+    uint256 private constant OPTIMISTIC_GAS = 100000;
+
+    event SingleVerificationSent(
+        bytes32 indexed payloadHash,
+        bool isFieldVerification
+    );
+
+    function optimizeMessageVerification(
+        MessageVerification memory original
+    ) internal pure returns (OptimizedMessageVerification memory) {
+        OptimizedMessageVerification memory optimized;
+
+        // Copy boolean
+        optimized.isValid = original.isValid;
+
+        // Convert string message to bytes32 messageHash using keccak256
+        optimized.messageHash = keccak256(bytes(original.message));
+
+        // Convert Signature to OptimizedSignature
+        optimized.signature.r = bytes32(original.signature.r);
+        optimized.signature.s = bytes32(original.signature.s);
+
+        // Convert Point to OptimizedPoint
+        optimized.publicKey.x = bytes32(original.publicKey.x);
+        optimized.publicKey.y = bytes32(original.publicKey.y);
+
+        return optimized;
+    }
+
+    // Helper function to convert from MessageVerification to OptimizedOriginalMessageVerification
+    function optimizeOriginalMessageVerification(
+        MessageVerification memory original
+    ) internal pure returns (OptimizedOriginalMessageVerification memory) {
+        OptimizedOriginalMessageVerification memory optimized;
+
+        optimized.isValid = original.isValid;
+        optimized.message = original.message; // Keep original string
+
+        // Convert Signature to OptimizedSignature
+        optimized.signature.r = bytes32(original.signature.r);
+        optimized.signature.s = bytes32(original.signature.s);
+
+        // Convert Point to OptimizedPoint
+        optimized.publicKey.x = bytes32(original.publicKey.x);
+        optimized.publicKey.y = bytes32(original.publicKey.y);
+
+        return optimized;
+    } // Single Message Verification
+
+    function sendSingleMessageVerification(
+        uint16 dstChainId,
+        address receiver,
+        OptimizedMessageVerification calldata verification
+    ) external payable {
+        bytes memory payload = packSingleMessageVerification(verification);
+        _sendPayload(dstChainId, receiver, payload, OPTIMISTIC_GAS);
+        emit SingleVerificationSent(keccak256(payload), false);
+    }
+
+    function sendSingleOriginalMessageVerification(
+        uint16 dstChainId,
+        address receiver,
+        OptimizedOriginalMessageVerification calldata verification
+    ) external payable {
+        bytes memory payload = packSingleOriginalMessageVerification(
+            verification
+        );
+        _sendPayload(dstChainId, receiver, payload, OPTIMISTIC_GAS);
+        emit SingleVerificationSent(keccak256(payload), false);
+    }
+
+    function packSingleMessageVerification(
+        OptimizedMessageVerification memory verification
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodePacked(
+                uint8(2), // type identifier for message verification
+                verification.isValid,
+                verification.messageHash,
+                verification.signature.r,
+                verification.signature.s,
+                verification.publicKey.x,
+                verification.publicKey.y
+            );
+    }
+
+    function packSingleOriginalMessageVerification(
+        OptimizedOriginalMessageVerification memory verification
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodePacked(
+                uint8(3), // new type identifier for original message verification
+                verification.isValid,
+                bytes(verification.message).length, // string length
+                verification.message,
+                verification.signature.r,
+                verification.signature.s,
+                verification.publicKey.x,
+                verification.publicKey.y
+            );
+    }
+
+    function _sendPayload(
+        uint16 dstChainId,
+        address receiver,
+        bytes memory payload,
+        uint256 gasLimit
+    ) internal {
+        bytes memory adapterParams = abi.encodePacked(VERSION, gasLimit);
+
+        endpoint.send{value: msg.value}(
+            dstChainId,
+            abi.encodePacked(receiver),
+            payload,
+            payable(msg.sender),
+            address(0), // no ZRO payment
+            adapterParams
+        );
     }
 }

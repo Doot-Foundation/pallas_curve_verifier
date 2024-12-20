@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "./kimchi/Poseidon.sol";
+import {ILayerZeroEndpoint, ILayerZeroReceiver} from "./interfaces/ILayerZero.sol";
 
 error InvalidPublicKey();
 error StepSkipped();
@@ -12,6 +13,10 @@ error StepSkipped();
  */
 
 contract PallasFieldsSignatureVerifier is Poseidon {
+    address l1Contract;
+    uint16 public constant ETH_CHAIN_ID = 1;
+    ILayerZeroEndpoint public endpoint;
+
     /// @title Verify Fields State Structure
     /// @notice Holds the state for field array signature verification process
     /// @dev Used to track the progress and store intermediate results during verification
@@ -318,5 +323,87 @@ contract PallasFieldsSignatureVerifier is Poseidon {
         }
 
         return Point({x: _x, y: _y});
+    }
+
+    // -------------- Functions for bridging -------------------------------------------------------
+
+    uint16 private constant VERSION = 1;
+    uint256 private constant OPTIMISTIC_GAS = 100000;
+
+    event SingleVerificationSent(
+        bytes32 indexed payloadHash,
+        bool isFieldVerification
+    );
+    event BatchSent(bytes32 indexed batchId, uint16 verificationCount);
+
+    function optimizeFieldsVerification(
+        FieldsVerification memory original
+    ) internal pure returns (OptimizedFieldsVerification memory) {
+        OptimizedFieldsVerification memory optimized;
+
+        // Copy boolean
+        optimized.isValid = original.isValid;
+
+        // Convert uint256[] to bytes32[]
+        optimized.fields = new bytes32[](original.fields.length);
+        for (uint256 i = 0; i < original.fields.length; i++) {
+            optimized.fields[i] = bytes32(original.fields[i]);
+        }
+
+        // Convert Signature to OptimizedSignature
+        optimized.signature.r = bytes32(original.signature.r);
+        optimized.signature.s = bytes32(original.signature.s);
+
+        // Convert Point to OptimizedPoint
+        optimized.publicKey.x = bytes32(original.publicKey.x);
+        optimized.publicKey.y = bytes32(original.publicKey.y);
+
+        return optimized;
+    }
+
+    // Single Field Verification
+    function sendSingleFieldsVerification(
+        uint16 dstChainId,
+        address receiver,
+        OptimizedFieldsVerification calldata verification
+    ) external payable {
+        bytes memory payload = packSingleFieldsVerification(verification);
+        _sendPayload(dstChainId, receiver, payload, OPTIMISTIC_GAS);
+        emit SingleVerificationSent(keccak256(payload), true);
+    }
+
+    // Packing Functions
+    function packSingleFieldsVerification(
+        OptimizedFieldsVerification memory verification
+    ) internal pure returns (bytes memory) {
+        return
+            abi.encodePacked(
+                uint8(1), // type identifier for fields verification
+                verification.isValid,
+                uint16(verification.fields.length),
+                verification.fields,
+                verification.signature.r,
+                verification.signature.s,
+                verification.publicKey.x,
+                verification.publicKey.y
+            );
+    }
+
+    function _sendPayload(
+        uint16 dstChainId,
+        address receiver,
+        bytes memory payload,
+        uint256 gasLimit
+    ) internal {
+        bytes memory adapterParams = abi.encodePacked(VERSION, gasLimit);
+
+        endpoint.send{value: msg.value}(
+            dstChainId,
+            abi.encodePacked(receiver),
+            payload,
+            payable(msg.sender),
+            address(0), // no ZRO payment
+            adapterParams
+        );
     }
 }

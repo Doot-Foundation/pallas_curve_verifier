@@ -38,3 +38,27 @@ _ETH price: $4000_
 | verifyMessage() | 6,377,241   | $0.255            | $281.87           |
 
 _ETH price: $4000_
+
+# How to get costs like Arbitrum but data availability on Ethereum ?
+
+L1 <-> L2 Cross Messaging with the help of LayerZero.
+
+At step_6 of both verifyFields() and verifyMessage() we can optimize the data for cheaper bridge costs,
+And make a call to the messaging interface in the middle.
+Data to be sent on Ethereum :
+
+```solidity
+  struct FieldsVerification {
+        bool isValid;
+        uint256[] fields;
+        Signature signature;
+        Point publicKey;
+    }
+
+    struct MessageVerification {
+        bool isValid;
+        string message;
+        Signature signature;
+        Point publicKey;
+    }
+```
