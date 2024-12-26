@@ -325,7 +325,9 @@ contract PallasFieldsSignatureVerifier is Poseidon {
         return Point({x: _x, y: _y});
     }
 
-    // -------------- Functions for bridging -------------------------------------------------------
+    // -------------- LAYERZERO FTW --------------
+    // -------------------------------------------
+
     // Original Data → optimize() → Optimized Data → pack() → Bytes for Transmission
     // (FieldsVerification) → (OptimizedFieldsVerification) → (bytes)
 
@@ -351,6 +353,7 @@ contract PallasFieldsSignatureVerifier is Poseidon {
     ) internal pure returns (OptimizedFieldsVerification memory) {
         OptimizedFieldsVerification memory optimized;
 
+        optimized.vfId = original.vfId; // Copy the ID
         optimized.isValid = original.isValid;
 
         optimized.fields = new bytes32[](original.fields.length);
@@ -376,6 +379,7 @@ contract PallasFieldsSignatureVerifier is Poseidon {
         return
             abi.encodePacked(
                 uint8(1), // type identifier for fields verification
+                verification.vfId, // Add vfId to packed data
                 verification.isValid,
                 uint16(verification.fields.length),
                 verification.fields,

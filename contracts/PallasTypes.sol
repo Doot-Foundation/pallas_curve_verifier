@@ -26,6 +26,7 @@ contract PallasTypes {
         uint256 y;
         uint256 z;
     }
+
     struct OptimizedPoint {
         bytes32 x;
         bytes32 y;
@@ -43,13 +44,18 @@ contract PallasTypes {
         OptimizedPoint[] keys;
         bool[] isValid;
     }
+
+    // Modified structs with IDs
     struct FieldsVerification {
+        uint256 vfId;
         bool isValid;
         uint256[] fields;
         Signature signature;
         Point publicKey;
     }
+
     struct MessageVerification {
+        uint256 vmId;
         bool isValid;
         string message;
         Signature signature;
@@ -57,6 +63,7 @@ contract PallasTypes {
     }
 
     struct OptimizedFieldsVerification {
+        uint256 vfId;
         bool isValid;
         bytes32[] fields;
         OptimizedSignature signature;
@@ -64,6 +71,7 @@ contract PallasTypes {
     }
 
     struct OptimizedMessageVerification {
+        uint256 vmId;
         bool isValid;
         bytes32 messageHash;
         OptimizedSignature signature;
@@ -71,6 +79,7 @@ contract PallasTypes {
     }
 
     struct OptimizedOriginalMessageVerification {
+        uint256 vmId;
         bool isValid;
         OptimizedSignature signature;
         OptimizedPoint publicKey;

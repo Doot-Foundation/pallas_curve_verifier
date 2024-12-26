@@ -298,7 +298,9 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy {
         return Point({x: _x, y: _y});
     }
 
-    // -------------- Functions for bridging -------------------------------------------------------
+    // -------------- LAYERZERO FTW --------------
+    // -------------------------------------------
+
     // Original Data (MessageVerification) → optimize() →
     // Optimized Data (OptimizedMessageVerification/OptimizedOriginalMessageVerification) →
     // pack() → Bytes for Transmission
@@ -332,8 +334,8 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy {
     ) internal pure returns (OptimizedMessageVerification memory) {
         OptimizedMessageVerification memory optimized;
 
+        optimized.vmId = original.vmId; // Copy the ID
         optimized.isValid = original.isValid;
-
         optimized.messageHash = keccak256(bytes(original.message));
 
         optimized.signature.r = bytes32(original.signature.r);
@@ -354,6 +356,7 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy {
     ) internal pure returns (OptimizedOriginalMessageVerification memory) {
         OptimizedOriginalMessageVerification memory optimized;
 
+        optimized.vmId = original.vmId; // Copy the ID
         optimized.isValid = original.isValid;
         optimized.message = original.message; // Keep original string
 
@@ -376,6 +379,7 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy {
         return
             abi.encodePacked(
                 uint8(2), // type identifier for message verification
+                verification.vmId, // Add vmId to packed data
                 verification.isValid,
                 verification.messageHash,
                 verification.signature.r,
@@ -394,9 +398,10 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy {
     ) internal pure returns (bytes memory) {
         return
             abi.encodePacked(
-                uint8(3), // new type identifier for original message verification
+                uint8(3), // type identifier for original message verification
+                verification.vmId, // Add vmId to packed data
                 verification.isValid,
-                bytes(verification.message).length,
+                bytes(verification.message).length, // message length
                 verification.message,
                 verification.signature.r,
                 verification.signature.s,

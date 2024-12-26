@@ -27,11 +27,11 @@ contract MockLZEndpoint {
     function send(
         uint16 _dstChainId,
         bytes calldata _destination,
-        bytes calldata _payload,
-        address payable _refundAddress,
-        address _zroPaymentAddress,
-        bytes calldata _adapterParams
+        bytes calldata _payload
     ) external payable {
+        // address payable _refundAddress,
+        // address _zroPaymentAddress,
+        // bytes calldata _adapterParams
         address dstAddress = address(bytes20(_destination));
 
         // Mock the cross-chain message by directly calling the destination
