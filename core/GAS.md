@@ -5,12 +5,14 @@
 - Arbitrum: 0.00000000001 ETH (0.01 Gwei)
 - Ethereum: 0.00000001105 ETH (11.5 Gwei)
 
+### At $4000 ETH
+
 ## Deployment Costs
 
-| Contract      | Gas Used   |
-| ------------- | ---------- |
-| VerifyFields  | 7,294,407  |
-| VerifyMessage | 10,823,527 |
+| Contract      | Gas Used   | Arbitrum Cost ($) | Ethereum Cost ($) |
+| ------------- | ---------- | ----------------- | ----------------- |
+| VerifyFields  | 7,294,407  | $0.29             | $322.41           |
+| VerifyMessage | 10,823,527 | $0.433            | $478.39           |
 
 ## Large Input Test (100 Fields/Characters)
 

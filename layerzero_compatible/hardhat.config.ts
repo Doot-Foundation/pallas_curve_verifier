@@ -39,17 +39,20 @@ const config: HardhatUserConfig = {
         cache: 'cache/hardhat',
     },
     solidity: {
-        compilers: [
-            {
-                version: '0.8.22',
-                settings: {
-                    optimizer: {
-                        enabled: true,
-                        runs: 200,
+        version: '0.8.22',
+        settings: {
+            optimizer: {
+                enabled: true,
+                runs: 100000,
+                details: {
+                    yul: true,
+                    yulDetails: {
+                        stackAllocation: true,
                     },
                 },
             },
-        ],
+            viaIR: true,
+        },
     },
     networks: {
         'sepolia-testnet': {
