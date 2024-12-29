@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import { SetConfigParam } from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/IMessageLibManager.sol";
 import { OAppReceiver, Origin } from "@layerzerolabs/oapp-evm/contracts/oapp/OAppReceiver.sol";
 import { OAppCore } from "@layerzerolabs/oapp-evm/contracts/oapp/OAppCore.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
@@ -78,6 +79,18 @@ contract PallasVerificationReceiever is OAppReceiver {
         OptimizedPoint key
     );
 
+    // ChainId       : 1
+    // EndpointId    : 30101
+    // EndpointV2    : 0x1a44076050125825900e736c501f859c50fE728c
+    // SendUln302    : 0xbB2Ea70C9E858123480642Cf96acbcCE1372dCe1
+    // ReceiveUln302 : 0xc02Ab410f0734EFa3F14628780e6e695156024C2
+    // LZ Executor   : 0x173272739Bd7Aa6e4e214714048a9fE699453059
+    // LZ Dead DVN   : 0x747C741496a507E4B404b50463e691A8d692f6Ac
+    //  const receiveTx = await endpointContract.setReceiveLibrary(
+    //   YOUR_OAPP_ADDRESS,
+    //   remoteEid,
+    //   YOUR_RECEIVE_LIB_ADDRESS,
+    // );
     function _lzReceive(Origin calldata, bytes32, bytes calldata _payload, address, bytes calldata) internal override {
         uint8 typeId = uint8(_payload[0]);
 
@@ -320,6 +333,17 @@ contract PallasVerificationReceiever is OAppReceiver {
         }
 
         return verification;
+    }
+
+    function setConfig(uint32 _eid, uint32 _configType, bytes calldata _config) external onlyOwner {
+        SetConfigParam[] memory params = new SetConfigParam[](1);
+        params[0] = SetConfigParam({ eid: _eid, configType: _configType, config: _config });
+
+        endpoint.setConfig(
+            address(this),
+            address(0), // since we're not configuring a specific library
+            params
+        );
     }
 
     function oAppVersion() public pure override returns (uint64 senderVersion, uint64 receiverVersion) {

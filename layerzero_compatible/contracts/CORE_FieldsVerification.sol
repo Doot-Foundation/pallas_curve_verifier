@@ -4,6 +4,7 @@ pragma solidity ^0.8.0;
 import "./kimchi/Poseidon.sol";
 import { OAppSender, MessagingFee, MessagingReceipt } from "@layerzerolabs/oapp-evm/contracts/oapp/OAppSender.sol";
 import { MessagingParams } from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
+import { SetConfigParam } from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/IMessageLibManager.sol";
 import { OAppCore } from "@layerzerolabs/oapp-evm/contracts/oapp/OAppCore.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
@@ -16,10 +17,6 @@ error StepSkipped();
  */
 
 contract PallasFieldsSignatureVerifier is Poseidon, OAppSender {
-    address l1Contract;
-    uint16 public constant ETH_CHAIN_ID = 1;
-    // ILayerZeroEndpoint public endpoint;
-
     /// @title Verify Fields State Structure
     /// @notice Holds the state for field array signature verification process
     /// @dev Used to track the progress and store intermediate results during verification
@@ -52,7 +49,7 @@ contract PallasFieldsSignatureVerifier is Poseidon, OAppSender {
         uint256[] fields;
     }
 
-    // uint256 private constant EVEN_CHECK_MASK = 1;
+    /// Delegate and Owner to be set as address(0) after configuring for no interactions from anyone.
     constructor(
         address _endpoint, // LayerZero endpoint address
         address _delegate, // Address that can configure the OApp in the endpoint
@@ -264,6 +261,8 @@ contract PallasFieldsSignatureVerifier is Poseidon, OAppSender {
         return current.isValid;
     }
 
+    function step_7_VF(uint256 vfId) external isValidVFId(vfId) {}
+
     /// @notice Converts a string to its character array representation and computes its Poseidon hash
     /// @dev Matches the behavior of CircuitString.from(str).hash() from o1js
     /// Process:
@@ -324,7 +323,9 @@ contract PallasFieldsSignatureVerifier is Poseidon, OAppSender {
 
     /// @notice LayerZero message version
     uint16 private constant VERSION = 1;
+    uint16 private DEST_CHAIN_ID;
 
+    bytes32 private PEER;
     /// @notice Default gas limit for optimistic execution on destination chain
     uint256 private constant OPTIMISTIC_GAS = 100000;
 
@@ -332,6 +333,36 @@ contract PallasFieldsSignatureVerifier is Poseidon, OAppSender {
     /// @param payloadHash The keccak256 hash of the sent payload
     /// @param isFieldVerification True if this is a field verification, false if message verification
     event SingleVerificationSent(bytes32 indexed payloadHash, bool isFieldVerification);
+
+    /// CONFIGURATION FUNCTIONS ------------------------------------
+    // ChainId       : 42161
+    // EndpointId    : 30110
+    // EndpointV2    : 0x1a44076050125825900e736c501f859c50fE728c
+    // SendUln302    : 0x975bcD720be66659e3EB3C0e4F1866a3020E493A
+    // ReceiveUln302 : 0x7B9E184e07a6EE1aC23eAe0fe8D6Be2f663f05e6
+    // LZ Executor   : 0x31CAe3B7fB82d847621859fb1585353c5720660D
+    // LZ Dead DVN   : 0x758C419533ad64Ce9D3413BC8d3A97B026098EC1
+    // const sendTx = await endpointContract.setSendLibrary(
+    //   YOUR_OAPP_ADDRESS,
+    //   remoteEid,
+    //   YOUR_SEND_LIB_ADDRESS,
+    // );
+
+    function setConfig(uint32 _eid, uint32 _configType, bytes calldata _config) external onlyOwner {
+        SetConfigParam[] memory params = new SetConfigParam[](1);
+        params[0] = SetConfigParam({ eid: _eid, configType: _configType, config: _config });
+
+        endpoint.setConfig(address(this), address(0), params);
+    }
+
+    function setPeer(address _peer) external onlyOwner {
+        PEER = bytes32(abi.encodePacked(_peer));
+        _setPeer(DEST_CHAIN_ID, PEER);
+    }
+
+    function setDestChainId(uint16 _destChainId) external onlyOwner {
+        DEST_CHAIN_ID = _destChainId;
+    }
 
     /// @notice Converts a standard FieldsVerification into an optimized format for cross-chain transmission
     /// @param original The original FieldsVerification struct to optimize
@@ -379,60 +410,32 @@ contract PallasFieldsSignatureVerifier is Poseidon, OAppSender {
     }
 
     /// @notice Sends a single field verification to another chain via LayerZero
-    /// @param dstChainId The destination chain ID in LayerZero
-    /// @param receiver The address of the receiving contract on the destination chain
     /// @param verification The verification data to send
     /// @dev Requires msg.value to cover LayerZero fees
-    function sendSingleFieldsVerification(
-        uint16 dstChainId,
-        address receiver,
-        FieldsVerification calldata verification
-    ) external payable {
+    function sendSingleFieldsVerification(FieldsVerification calldata verification) external payable {
         OptimizedFieldsVerification memory optimized = optimizeFieldsVerification(verification);
         bytes memory payload = packSingleFieldsVerification(optimized);
-        _sendPayload(dstChainId, receiver, payload, OPTIMISTIC_GAS);
+        _sendPayload(payload, OPTIMISTIC_GAS);
         emit SingleVerificationSent(keccak256(payload), true);
     }
 
     /// @notice Internal function to send payload through LayerZero
-    /// @param dstChainId The destination chain ID in LayerZero
-    /// @param receiver The address of the receiving contract
     /// @param payload The encoded data to send
     /// @param gasLimit Gas limit for execution on destination chain
     /// @dev Uses VERSION for adapter parameters and optimistic execution
-    function _sendPayload(uint16 dstChainId, address receiver, bytes memory payload, uint256 gasLimit) internal {
+    function _sendPayload(bytes memory payload, uint256 gasLimit) internal {
         bytes memory options = abi.encodePacked(VERSION, gasLimit);
-
-        // Convert receiver address to bytes32 for peer
-        bytes32 peer = bytes32(uint256(uint160(receiver)));
-
         MessagingFee memory fee = _quote(
-            dstChainId,
+            DEST_CHAIN_ID,
             payload,
             options,
             false // not paying in LZ token
         );
 
-        // Set the peer for this destination chain
-        _setPeer(dstChainId, peer);
-
-        _lzSend(dstChainId, payload, options, fee, payable(msg.sender));
-
-        // endpoint.send{ value: msg.value }(
-        //     dstChainId,
-        //     abi.encodePacked(receiver),
-        //     payload,
-        //     payable(msg.sender),
-        //     address(0), // no ZRO payment
-        //     adapterParams
-        // );
+        _lzSend(DEST_CHAIN_ID, payload, options, fee, payable(msg.sender));
     }
 
-    // function _sendPayload(uint16 dstChainId, address receiver, bytes memory payload, uint256 gasLimit) internal {
-
-    // }
-
     function oAppVersion() public pure override returns (uint64 senderVersion, uint64 receiverVersion) {
-        return (1, 1); // You can adjust these version numbers as needed
+        return (1, 1);
     }
 }
