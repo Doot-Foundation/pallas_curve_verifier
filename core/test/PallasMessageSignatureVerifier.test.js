@@ -4,6 +4,7 @@ const {
 } = require("@nomicfoundation/hardhat-toolbox/network-helpers");
 const { PublicKey, PrivateKey } = require("o1js");
 const { Client } = require("mina-signer");
+const { decodeVMStateBytesCompressed } = require("../utils/helper");
 
 describe("PallasMessageSignatureVerifier", function () {
   async function deployVerifierFixture() {
@@ -101,6 +102,9 @@ describe("PallasMessageSignatureVerifier", function () {
       await txn.wait();
 
       const finalObject = await verifier.getVMState(vmId);
+      const bytesObject = await verifier.getVMStateBytesCompressed(vmId);
+      const decodedjs = decodeVMStateBytesCompressed(bytesObject);
+
       expect(finalObject[2]).to.equal(result);
       expect(finalObject[2]).to.equal(true);
     });

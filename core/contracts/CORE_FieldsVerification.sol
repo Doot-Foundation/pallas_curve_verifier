@@ -139,7 +139,7 @@ contract PallasFieldsSignatureVerifier is Poseidon {
     /// Hence we have a function in the tests.
     function decodeVFStateBytesCompressed(
         bytes calldata data
-    ) public pure returns (VerifyFieldsStateCompressed memory state) {
+    ) internal pure returns (VerifyFieldsStateCompressed memory state) {
         // First byte -> verifyType
         uint8 verifyType = uint8(data[0]);
         state.verifyType = verifyType;
