@@ -265,39 +265,11 @@ contract PallasFieldsSignatureVerifier is Poseidon {
         current.isValid = (R.x == sigR) && (R.y & 1 == 0);
         current.atStep = 6;
 
-        // bytes memory stateBytes = packVerifyFieldsState(current, vfId);
         bytes memory stateBytesCompressed = packVerifyFieldsStateCompressed(current, vfId);
-        // vfLifeCycleBytes[vfId] = stateBytes;
         vfLifeCycleBytesCompressed[vfId] = stateBytesCompressed;
 
         return current.isValid;
     }
-
-    // function packVerifyFieldsState(VerifyFieldsState memory state, uint256 vfId) public pure returns (bytes memory) {
-    //     bytes memory fixedData = abi.encodePacked(
-    //         TYPE_VERIFY_FIELDS,
-    //         vfId,
-    //         state.init,
-    //         state.mainnet,
-    //         state.isValid,
-    //         state.atStep,
-    //         state.publicKey.x,
-    //         state.publicKey.y,
-    //         state.signature.r,
-    //         state.signature.s,
-    //         state.messageHash,
-    //         state.pkInGroup.x,
-    //         state.pkInGroup.y,
-    //         state.sG.x,
-    //         state.sG.y,
-    //         state.ePk.x,
-    //         state.ePk.y,
-    //         state.R.x,
-    //         state.R.y
-    //     );
-
-    //     return abi.encodePacked(fixedData, abi.encode(state.fields));
-    // }
 
     function packVerifyFieldsStateCompressed(
         VerifyFieldsState memory state,

@@ -273,39 +273,11 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy {
         current.isValid = (R.x == sigR) && (R.y & 1 == 0);
         current.atStep = 6;
 
-        // bytes memory stateBytes = packVerifyMessageState(current, vmId);
         bytes memory stateBytesCompressed = packVerifyMessageStateCompressed(current, vmId);
-        // vmLifeCycleBytes[vmId] = stateBytes;
         vmLifeCycleBytesCompressed[vmId] = stateBytesCompressed;
 
         return current.isValid;
     }
-
-    // function packVerifyMessageState(VerifyMessageState memory state, uint256 vmId) public pure returns (bytes memory) {
-    //     bytes memory fixedData = abi.encodePacked(
-    //         TYPE_VERIFY_MESSAGE,
-    //         vmId,
-    //         state.init,
-    //         state.mainnet,
-    //         state.isValid,
-    //         state.atStep,
-    //         state.publicKey.x,
-    //         state.publicKey.y,
-    //         state.signature.r,
-    //         state.signature.s,
-    //         state.messageHash,
-    //         state.pkInGroup.x,
-    //         state.pkInGroup.y,
-    //         state.sG.x,
-    //         state.sG.y,
-    //         state.ePk.x,
-    //         state.ePk.y,
-    //         state.R.x,
-    //         state.R.y
-    //     );
-
-    //     return abi.encodePacked(fixedData, abi.encode(state.message));
-    // }
 
     function packVerifyMessageStateCompressed(
         VerifyMessageState memory state,

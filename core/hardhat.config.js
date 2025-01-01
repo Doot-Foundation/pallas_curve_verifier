@@ -22,7 +22,6 @@ module.exports = {
     hardhat: {
       // allowUnlimitedContractSize: true,
       // blockGasLimit: 100000000000, // Practically unlimited
-      // gas: 100000000000,
     },
     l1: {
       url: "http://127.0.0.1:8545",
