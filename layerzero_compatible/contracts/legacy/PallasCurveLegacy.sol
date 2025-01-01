@@ -7,14 +7,12 @@ import "../PallasTypes.sol";
  * @title PallasCurve
  * @dev Implementation of Pallas curve operations
  */
-contract PallasCurveLegacy is PallasTypes {
+contract PallasCurveLegacy {
     /// @notice Field modulus for Pallas curve
-    uint256 public constant FIELD_MODULUS =
-        0x40000000000000000000000000000000224698fc094cf91b992d30ed00000001;
+    uint256 public constant FIELD_MODULUS = 0x40000000000000000000000000000000224698fc094cf91b992d30ed00000001;
 
     /// @notice Scalar field modulus for Pallas curve
-    uint256 public constant SCALAR_MODULUS =
-        0x40000000000000000000000000224698fc0994a8dd8c46eb2100000001;
+    uint256 public constant SCALAR_MODULUS = 0x40000000000000000000000000224698fc0994a8dd8c46eb2100000001;
 
     /// @notice Curve equation constant (B) where y² = x³ + B
     uint256 public constant BEQ = 5;
@@ -32,8 +30,7 @@ contract PallasCurveLegacy is PallasTypes {
     uint256 public constant G_X = 1;
 
     /// @notice Generator point y-coordinate
-    uint256 public constant G_Y =
-        0x1b74b5a30a12937c53dfa9f06378ee548f655bd4333d477119cf7a23caed2abb;
+    uint256 public constant G_Y = 0x1b74b5a30a12937c53dfa9f06378ee548f655bd4333d477119cf7a23caed2abb;
 
     /// @notice Performs modular addition
     /// @dev Wrapper around Solidity's addmod
@@ -95,11 +92,7 @@ contract PallasCurveLegacy is PallasTypes {
     /// @param exponent Exponent value
     /// @param modulus Modulus for operation
     /// @return result Result of base^exponent mod modulus
-    function modExp(
-        uint256 base,
-        uint256 exponent,
-        uint256 modulus
-    ) internal view returns (uint256 result) {
+    function modExp(uint256 base, uint256 exponent, uint256 modulus) internal view returns (uint256 result) {
         assembly {
             // Free memory pointer
             let p := mload(0x40)
@@ -202,9 +195,7 @@ contract PallasCurveLegacy is PallasTypes {
     /// @dev Returns (1:1:0) for point at infinity
     /// @param p Point in affine coordinates
     /// @return ProjectivePoint Point in projective coordinates
-    function toProjective(
-        Point memory p
-    ) internal pure returns (ProjectivePoint memory) {
+    function toProjective(Point memory p) internal pure returns (ProjectivePoint memory) {
         if (p.x == 0 && p.y == 0) {
             return ProjectivePoint(1, 1, 0); // Point at infinity
         }
@@ -215,9 +206,7 @@ contract PallasCurveLegacy is PallasTypes {
     /// @dev Handles point at infinity case
     /// @param p Point in projective coordinates
     /// @return Point Point in affine coordinates
-    function toAffine(
-        ProjectivePoint memory p
-    ) internal pure returns (Point memory) {
+    function toAffine(ProjectivePoint memory p) internal pure returns (Point memory) {
         if (p.z == 0) {
             return Point(0, 0); // Point at infinity
         }
@@ -228,11 +217,7 @@ contract PallasCurveLegacy is PallasTypes {
         return
             Point(
                 mulmod(p.x, zinv_squared, FIELD_MODULUS),
-                mulmod(
-                    p.y,
-                    mulmod(zinv, zinv_squared, FIELD_MODULUS),
-                    FIELD_MODULUS
-                )
+                mulmod(p.y, mulmod(zinv, zinv_squared, FIELD_MODULUS), FIELD_MODULUS)
             );
     }
 
@@ -240,9 +225,7 @@ contract PallasCurveLegacy is PallasTypes {
     /// @dev Specialized operation for when both points are the same
     /// @param g Point to double
     /// @return ProjectivePoint Doubled point
-    function projectiveDouble(
-        ProjectivePoint memory g
-    ) internal pure returns (ProjectivePoint memory) {
+    function projectiveDouble(ProjectivePoint memory g) internal pure returns (ProjectivePoint memory) {
         if (g.z == 0) return g;
         if (g.y == 0) revert("Cannot double point with y=0");
 
@@ -278,21 +261,13 @@ contract PallasCurveLegacy is PallasTypes {
             uint256 F = mulmod(E, E, FIELD_MODULUS);
 
             // Calculate X3 first as it's needed for Y3
-            uint256 X3 = addmod(
-                F,
-                FIELD_MODULUS - mulmod(2, D, FIELD_MODULUS),
-                FIELD_MODULUS
-            );
+            uint256 X3 = addmod(F, FIELD_MODULUS - mulmod(2, D, FIELD_MODULUS), FIELD_MODULUS);
 
             return
                 ProjectivePoint(
                     X3,
                     addmod(
-                        mulmod(
-                            E,
-                            addmod(D, FIELD_MODULUS - X3, FIELD_MODULUS),
-                            FIELD_MODULUS
-                        ),
+                        mulmod(E, addmod(D, FIELD_MODULUS - X3, FIELD_MODULUS), FIELD_MODULUS),
                         FIELD_MODULUS - mulmod(8, C, FIELD_MODULUS),
                         FIELD_MODULUS
                     ),
@@ -321,16 +296,8 @@ contract PallasCurveLegacy is PallasTypes {
             uint256 Z2Z2 = mulmod(z2, z2, FIELD_MODULUS);
             uint256 U1 = mulmod(g.x, Z2Z2, FIELD_MODULUS);
             uint256 U2 = mulmod(h.x, Z1Z1, FIELD_MODULUS);
-            uint256 S1 = mulmod(
-                g.y,
-                mulmod(z2, Z2Z2, FIELD_MODULUS),
-                FIELD_MODULUS
-            );
-            uint256 S2 = mulmod(
-                h.y,
-                mulmod(z1, Z1Z1, FIELD_MODULUS),
-                FIELD_MODULUS
-            );
+            uint256 S1 = mulmod(g.y, mulmod(z2, Z2Z2, FIELD_MODULUS), FIELD_MODULUS);
+            uint256 S2 = mulmod(h.y, mulmod(z1, Z1Z1, FIELD_MODULUS), FIELD_MODULUS);
             uint256 H = addmod(U2, FIELD_MODULUS - U1, FIELD_MODULUS);
 
             if (H == 0) {
@@ -345,18 +312,13 @@ contract PallasCurveLegacy is PallasTypes {
 
             uint256 I = mulmod(mulmod(H, H, FIELD_MODULUS), 4, FIELD_MODULUS);
             uint256 J = mulmod(H, I, FIELD_MODULUS);
-            uint256 r = mulmod(
-                2,
-                addmod(S2, FIELD_MODULUS - S1, FIELD_MODULUS),
-                FIELD_MODULUS
-            );
+            uint256 r = mulmod(2, addmod(S2, FIELD_MODULUS - S1, FIELD_MODULUS), FIELD_MODULUS);
             uint256 V = mulmod(U1, I, FIELD_MODULUS);
 
             // Calculate X3 first as it's needed for Y3
             uint256 X3 = addmod(
                 mulmod(r, r, FIELD_MODULUS),
-                FIELD_MODULUS -
-                    addmod(J, mulmod(2, V, FIELD_MODULUS), FIELD_MODULUS),
+                FIELD_MODULUS - addmod(J, mulmod(2, V, FIELD_MODULUS), FIELD_MODULUS),
                 FIELD_MODULUS
             );
 
@@ -364,26 +326,13 @@ contract PallasCurveLegacy is PallasTypes {
                 ProjectivePoint(
                     X3,
                     addmod(
-                        mulmod(
-                            r,
-                            addmod(V, FIELD_MODULUS - X3, FIELD_MODULUS),
-                            FIELD_MODULUS
-                        ),
-                        FIELD_MODULUS -
-                            mulmod(
-                                2,
-                                mulmod(S1, J, FIELD_MODULUS),
-                                FIELD_MODULUS
-                            ),
+                        mulmod(r, addmod(V, FIELD_MODULUS - X3, FIELD_MODULUS), FIELD_MODULUS),
+                        FIELD_MODULUS - mulmod(2, mulmod(S1, J, FIELD_MODULUS), FIELD_MODULUS),
                         FIELD_MODULUS
                     ),
                     mulmod(
                         addmod(
-                            mulmod(
-                                addmod(z1, z2, FIELD_MODULUS),
-                                addmod(z1, z2, FIELD_MODULUS),
-                                FIELD_MODULUS
-                            ),
+                            mulmod(addmod(z1, z2, FIELD_MODULUS), addmod(z1, z2, FIELD_MODULUS), FIELD_MODULUS),
                             FIELD_MODULUS - addmod(Z1Z1, Z2Z2, FIELD_MODULUS),
                             FIELD_MODULUS
                         ),
@@ -399,10 +348,7 @@ contract PallasCurveLegacy is PallasTypes {
     /// @param p1 First point
     /// @param p2 Second point
     /// @return Point Sum of the points
-    function addPoints(
-        Point memory p1,
-        Point memory p2
-    ) internal pure returns (Point memory) {
+    function addPoints(Point memory p1, Point memory p2) internal pure returns (Point memory) {
         ProjectivePoint memory g = toProjective(p1);
         ProjectivePoint memory h = toProjective(p2);
         ProjectivePoint memory r = projectiveAdd(g, h);
@@ -414,10 +360,7 @@ contract PallasCurveLegacy is PallasTypes {
     /// @param p Base point
     /// @param scalar Scalar value
     /// @return Point Resulting point
-    function scalarMul(
-        Point memory p,
-        uint256 scalar
-    ) internal pure returns (Point memory) {
+    function scalarMul(Point memory p, uint256 scalar) internal pure returns (Point memory) {
         ProjectivePoint memory g = toProjective(p);
         ProjectivePoint memory result = ProjectivePoint(1, 1, 0);
         ProjectivePoint memory current = g;

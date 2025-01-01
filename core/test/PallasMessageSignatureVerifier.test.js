@@ -29,7 +29,7 @@ describe("PallasMessageSignatureVerifier", function () {
       };
 
       const message =
-        "Sign this message to prove you have access to this wallet. You will be logged in automatically.";
+        "Sign this message to prove you have access to this wallet. You will be logged in automatically.Sign this message to prove you have access to this wallet. You will be logged in automatically.Sign this message to prove you have access to this wallet. You will be logged in automatically.Sign this message to prove you have access to this wallet. You will be logged in automatically.Sign this message to prove you have access to this wallet. You will be logged in automatically.";
 
       // Get signed message
       const signedMessage = client.signMessage(message, keypair.privateKey);

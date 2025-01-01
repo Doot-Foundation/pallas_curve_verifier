@@ -2,10 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "./legacy/PoseidonLegacy.sol";
-import { OAppSender, MessagingFee, MessagingReceipt } from "@layerzerolabs/oapp-evm/contracts/oapp/OAppSender.sol";
-import { MessagingParams } from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
-import { SetConfigParam } from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/IMessageLibManager.sol";
-import { OAppCore } from "@layerzerolabs/oapp-evm/contracts/oapp/OAppCore.sol";
+
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 error InvalidPublicKey();
@@ -16,7 +13,7 @@ error StepSkipped();
  * @dev Verifies signatures over message generated using mina-signer.
  */
 
-contract PallasMessageSignatureVerifier is PoseidonLegacy, OAppSender {
+contract PallasMessageSignatureVerifier is PoseidonLegacy {
     /// @title Verification Message State Structure
     /// @notice Holds the state for message signature verification process
     /// @dev Used to track the progress and store intermediate results during verification
@@ -43,18 +40,13 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy, OAppSender {
         Point ePk;
         /// @notice Final computed point R = sG - ePk
         Point R;
-        /// @notice The message being verified
-        string message;
         /// @notice Network-specific prefix for message hashing
         string prefix;
+        /// @notice The message being verified
+        string message;
     }
 
-    /// Delegate and Owner to be set as address(0) after configuring for no interactions from anyone.
-    constructor(
-        address _endpoint, // LayerZero endpoint address
-        address _delegate, // Address that can configure the OApp in the endpoint
-        address _owner
-    ) OAppCore(_endpoint, _delegate) Ownable(_owner) {}
+    uint8 constant TYPE_VERIFY_MESSAGE = 1;
 
     /// @notice Counter for tracking total number of verification processes
     /// @dev Incremented for each new verification process
@@ -67,6 +59,9 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy, OAppSender {
     /// @notice Maps verification IDs to their respective state structures
     /// @dev Main storage for verification process states
     mapping(uint256 => VerifyMessageState) public vmLifeCycle;
+    /// @dev Only updated at the final step. Bytes representation of VerifyMessageState.
+    mapping(uint256 => bytes) public vmLifeCycleBytes;
+    mapping(uint256 => bytes) public vmLifeCycleBytesCompressed;
 
     /// @notice Ensures only the creator of a verification process can access it
     /// @param id The verification process ID
@@ -90,11 +85,24 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy, OAppSender {
     }
 
     /// @notice Retrieves the complete state of a verification process
-    /// @dev Returns a copy of the state, not a reference
     /// @param vmId The ID of the verification process
     /// @return state The complete verification state structure
     function getVMState(uint256 vmId) external view returns (VerifyMessageState memory state) {
         return vmLifeCycle[vmId];
+    }
+
+    /// @notice Retrieves the complete state of a verification process in bytes
+    /// @param vmId The ID of the verification process
+    /// @return state The complete verification state structure in bytes
+    function getVMStateBytes(uint256 vmId) external view returns (bytes memory) {
+        return vmLifeCycleBytes[vmId];
+    }
+
+    /// @notice Retrieves the complete state of a verification process in bytes
+    /// @param vmId The ID of the verification process
+    /// @return state The complete verification state structure in bytes
+    function getVMStateBytesCompressed(uint256 vmId) external view returns (bytes memory) {
+        return vmLifeCycleBytesCompressed[vmId];
     }
 
     /// @notice Validates if a point lies on the Pallas curve
@@ -265,10 +273,58 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy, OAppSender {
         current.isValid = (R.x == sigR) && (R.y & 1 == 0);
         current.atStep = 6;
 
+        // bytes memory stateBytes = packVerifyMessageState(current, vmId);
+        bytes memory stateBytesCompressed = packVerifyMessageStateCompressed(current, vmId);
+        // vmLifeCycleBytes[vmId] = stateBytes;
+        vmLifeCycleBytesCompressed[vmId] = stateBytesCompressed;
+
         return current.isValid;
     }
 
-    function step_7_VM_OptionalBridge(uint256 vmId, bool) external isValidVMId(vmId) returns (bool) {}
+    // function packVerifyMessageState(VerifyMessageState memory state, uint256 vmId) public pure returns (bytes memory) {
+    //     bytes memory fixedData = abi.encodePacked(
+    //         TYPE_VERIFY_MESSAGE,
+    //         vmId,
+    //         state.init,
+    //         state.mainnet,
+    //         state.isValid,
+    //         state.atStep,
+    //         state.publicKey.x,
+    //         state.publicKey.y,
+    //         state.signature.r,
+    //         state.signature.s,
+    //         state.messageHash,
+    //         state.pkInGroup.x,
+    //         state.pkInGroup.y,
+    //         state.sG.x,
+    //         state.sG.y,
+    //         state.ePk.x,
+    //         state.ePk.y,
+    //         state.R.x,
+    //         state.R.y
+    //     );
+
+    //     return abi.encodePacked(fixedData, abi.encode(state.message));
+    // }
+
+    function packVerifyMessageStateCompressed(
+        VerifyMessageState memory state,
+        uint256 vmId
+    ) public pure returns (bytes memory) {
+        bytes memory fixedData = abi.encodePacked(
+            TYPE_VERIFY_MESSAGE,
+            vmId,
+            state.mainnet,
+            state.isValid,
+            state.publicKey.x,
+            state.publicKey.y,
+            state.signature.r,
+            state.signature.s,
+            state.messageHash
+        );
+
+        return abi.encodePacked(fixedData, abi.encode(state.message));
+    }
 
     /// @notice Converts a compressed point to its full curve point representation
     /// @dev Implements point decompression for Pallas curve (y² = x³ + 5)
@@ -292,203 +348,4 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy, OAppSender {
 
         return Point({ x: _x, y: _y });
     }
-
-    // -------------- LAYERZERO FTW --------------
-    // -------------------------------------------
-
-    // Original Data (MessageVerification) → optimize() →
-    // Optimized Data (OptimizedMessageVerification/OptimizedOriginalMessageVerification) →
-    // pack() → Bytes for Transmission
-
-    // Two paths:
-    // 1. With hashing: MessageVerification → optimizeMessageVerification → OptimizedMessageVerification (hashed) →
-    //    packSingleMessageVerification → bytes
-    // 2. Without hashing: MessageVerification → optimizeOriginalMessageVerification →
-    //    OptimizedOriginalMessageVerification (original string) → packSingleOriginalMessageVerification → bytes
-
-    /// @notice LayerZero message version
-    uint16 private constant VERSION = 1;
-    uint16 private DEST_CHAIN_ID;
-
-    bytes32 private PEER;
-    /// @notice Default gas limit for optimistic execution on destination chain
-    uint256 private constant OPTIMISTIC_GAS = 100000;
-
-    /// @notice Emitted when a verification is sent cross-chain
-    /// @param payloadHash The keccak256 hash of the sent payload
-    /// @param isFieldVerification True if this is a field verification, false if message verification
-    event SingleVerificationSent(bytes32 indexed payloadHash, bool isFieldVerification);
-
-    /// CONFIGURATION FUNCTIONS ------------------------------------
-    // ChainId       : 42161
-    // EndpointId    : 30110
-    // EndpointV2    : 0x1a44076050125825900e736c501f859c50fE728c
-    // SendUln302    : 0x975bcD720be66659e3EB3C0e4F1866a3020E493A
-    // ReceiveUln302 : 0x7B9E184e07a6EE1aC23eAe0fe8D6Be2f663f05e6
-    // LZ Executor   : 0x31CAe3B7fB82d847621859fb1585353c5720660D
-    // LZ Dead DVN   : 0x758C419533ad64Ce9D3413BC8d3A97B026098EC1
-    // const sendTx = await endpointContract.setSendLibrary(
-    //       YOUR_OAPP_ADDRESS,
-    //       remoteEid,
-    //       YOUR_SEND_LIB_ADDRESS,
-    //     );
-
-    function setConfig(uint32 _eid, uint32 _configType, bytes calldata _config) external onlyOwner {
-        SetConfigParam[] memory params = new SetConfigParam[](1);
-        params[0] = SetConfigParam({ eid: _eid, configType: _configType, config: _config });
-
-        endpoint.setConfig(address(this), address(0), params);
-    }
-
-    function setPeer(address _peer) external onlyOwner {
-        if (DEST_CHAIN_ID == 0) revert();
-        PEER = bytes32(abi.encodePacked(_peer));
-        _setPeer(DEST_CHAIN_ID, PEER);
-    }
-
-    function setDestChainId(uint16 _destChainId) external onlyOwner {
-        DEST_CHAIN_ID = _destChainId;
-    }
-
-    /// @notice Converts a MessageVerification into an optimized format using message hashing
-    /// @param original The original MessageVerification struct to optimize
-    /// @return Optimized verification struct with hashed message
-    /// @dev Hashes the message string to bytes32 for gas optimization
-    function optimizeMessageVerification(
-        MessageVerification memory original
-    ) internal pure returns (OptimizedMessageVerification memory) {
-        OptimizedMessageVerification memory optimized;
-
-        optimized.vmId = original.vmId; // Copy the ID
-        optimized.isValid = original.isValid;
-        optimized.messageHash = keccak256(bytes(original.message));
-
-        optimized.signature.r = bytes32(original.signature.r);
-        optimized.signature.s = bytes32(original.signature.s);
-
-        optimized.publicKey.x = bytes32(original.publicKey.x);
-        optimized.publicKey.y = bytes32(original.publicKey.y);
-
-        return optimized;
-    }
-
-    /// @notice Converts a MessageVerification into an optimized format keeping original string
-    /// @param original The original MessageVerification struct to optimize
-    /// @return Optimized verification struct with original message string
-    /// @dev Preserves the original message string, higher gas cost but maintains readability
-    function optimizeOriginalMessageVerification(
-        MessageVerification memory original
-    ) internal pure returns (OptimizedOriginalMessageVerification memory) {
-        OptimizedOriginalMessageVerification memory optimized;
-
-        optimized.vmId = original.vmId; // Copy the ID
-        optimized.isValid = original.isValid;
-        optimized.message = original.message; // Keep original string
-
-        optimized.signature.r = bytes32(original.signature.r);
-        optimized.signature.s = bytes32(original.signature.s);
-
-        optimized.publicKey.x = bytes32(original.publicKey.x);
-        optimized.publicKey.y = bytes32(original.publicKey.y);
-
-        return optimized;
-    }
-
-    /// @notice Packs a hashed message verification into bytes for cross-chain transmission
-    /// @param verification The optimized verification struct with hashed message
-    /// @return The packed bytes with type identifier (2) and verification data
-    /// @dev Used for gas-optimized message transmission
-    function packSingleMessageVerification(
-        OptimizedMessageVerification memory verification
-    ) internal pure returns (bytes memory) {
-        return
-            abi.encodePacked(
-                uint8(2), // type identifier for message verification
-                verification.vmId, // Add vmId to packed data
-                verification.isValid,
-                verification.messageHash,
-                verification.signature.r,
-                verification.signature.s,
-                verification.publicKey.x,
-                verification.publicKey.y
-            );
-    }
-
-    /// @notice Packs an original message verification into bytes for cross-chain transmission
-    /// @param verification The optimized verification struct with original message
-    /// @return The packed bytes with type identifier (3), message length, and verification data
-    /// @dev Includes string length for proper decoding on receiver side
-    function packSingleOriginalMessageVerification(
-        OptimizedOriginalMessageVerification memory verification
-    ) internal pure returns (bytes memory) {
-        return
-            abi.encodePacked(
-                uint8(3), // type identifier for original message verification
-                verification.vmId, // Add vmId to packed data
-                verification.isValid,
-                bytes(verification.message).length, // message length
-                verification.message,
-                verification.signature.r,
-                verification.signature.s,
-                verification.publicKey.x,
-                verification.publicKey.y
-            );
-    }
-
-    /// @notice Sends a message verification with hashed message cross-chain
-    /// @param verification The verification data to send
-    /// @dev Uses message hashing for gas optimization, requires msg.value for LZ fees
-    function sendSingleMessageVerification(MessageVerification calldata verification) external payable {
-        OptimizedMessageVerification memory optimized = optimizeMessageVerification(verification);
-        bytes memory payload = packSingleMessageVerification(optimized);
-        _sendPayload(payload, OPTIMISTIC_GAS);
-        emit SingleVerificationSent(keccak256(payload), false);
-    }
-
-    /// @notice Sends a message verification with original string cross-chain
-    /// @param verification The verification data to send
-    /// @dev Preserves original message string, higher gas cost, requires msg.value for LZ fees
-    function sendSingleOriginalMessageVerification(MessageVerification calldata verification) external payable {
-        OptimizedOriginalMessageVerification memory optimized = optimizeOriginalMessageVerification(verification);
-        bytes memory payload = packSingleOriginalMessageVerification(optimized);
-        _sendPayload(payload, OPTIMISTIC_GAS);
-        emit SingleVerificationSent(keccak256(payload), false);
-    }
-
-    /// @notice Internal function to send payload through LayerZero
-    /// @param payload The encoded data to send
-    /// @param gasLimit Gas limit for execution on destination chain
-    /// @dev Configures adapter parameters and handles LZ endpoint interaction
-    function _sendPayload(bytes memory payload, uint256 gasLimit) internal {
-        bytes memory options = abi.encodePacked(VERSION, gasLimit);
-
-        MessagingFee memory fee = _quote(
-            DEST_CHAIN_ID,
-            payload,
-            options,
-            false // not paying in LZ token
-        );
-
-        _lzSend(DEST_CHAIN_ID, payload, options, fee, payable(msg.sender));
-    }
-
-    // // For faster messages
-    // bytes memory ultraLightConfig = abi.encode(
-    //     uint256(1),    // number of confirmations
-    //     uint256(1800)  // proof verification gas
-    // );
-
-    // // For optimized execution
-    // bytes memory executorConfig = abi.encode(
-    //     uint256(200000),  // gas limit
-    //     uint256(0)        // value
-    // );
-
-    // // On sender (Arbitrum)
-    // sender.setConfig(ETH_CHAIN_ID, 1, ultraLightConfig);  // ULN config
-    // sender.setConfig(ETH_CHAIN_ID, 2, executorConfig);    // Executor config
-
-    // // On receiver (Ethereum)
-    // receiver.setConfig(ARB_CHAIN_ID, 1, ultraLightConfig);  // ULN config
-    // receiver.setConfig(ARB_CHAIN_ID, 2, executorConfig);    // Executor config
 }

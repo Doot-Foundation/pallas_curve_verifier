@@ -3,17 +3,14 @@ pragma solidity ^0.8.20;
 
 import "./PallasConstants.sol";
 import "./PallasCurve.sol";
-import "hardhat/console.sol";
 
 /**
  * @title PoseidonT3
  * @dev Implementation of Poseidon hash function for t = 3 (2 inputs)
  */
 contract Poseidon is PallasCurve, PallasConstants {
-    uint256 internal constant CODA_PREFIX_FIELD =
-        240717916736854602989207148466022993262069182275;
-    uint256 internal constant MINA_PREFIX_FIELD =
-        664504924603203994814403132056773144791042910541;
+    uint256 internal constant CODA_PREFIX_FIELD = 240717916736854602989207148466022993262069182275;
+    uint256 internal constant MINA_PREFIX_FIELD = 664504924603203994814403132056773144791042910541;
 
     /// @notice Computes x^7 mod FIELD_MODULUS
     /// @dev Optimized power7 implementation matching o1js
@@ -32,10 +29,7 @@ contract Poseidon is PallasCurve, PallasConstants {
     /// @param row Row index of MDS matrix
     /// @param col Column index of MDS matrix
     /// @return uint256 Value at specified position
-    function getMdsValue(
-        uint256 row,
-        uint256 col
-    ) internal view returns (uint256) {
+    function getMdsValue(uint256 row, uint256 col) internal view returns (uint256) {
         require(row < 3 && col < 3, "Invalid MDS indices");
         return mdsMatrix[row][col];
     }
@@ -45,14 +39,8 @@ contract Poseidon is PallasCurve, PallasConstants {
     /// @param round Round number
     /// @param pos Position within the round
     /// @return uint256 Round constant value
-    function getRoundConstant(
-        uint256 round,
-        uint256 pos
-    ) internal view returns (uint256) {
-        require(
-            round < POSEIDON_FULL_ROUNDS && pos < 3,
-            "Invalid round constant indices"
-        );
+    function getRoundConstant(uint256 round, uint256 pos) internal view returns (uint256) {
+        require(round < POSEIDON_FULL_ROUNDS && pos < 3, "Invalid round constant indices");
         return roundConstants[round][pos];
     }
 
@@ -60,9 +48,7 @@ contract Poseidon is PallasCurve, PallasConstants {
     /// @dev Exactly matches o1js implementation
     /// @param state Current state array
     /// @return result Result of matrix multiplication
-    function mdsMultiply(
-        uint256[3] memory state
-    ) internal view returns (uint256[3] memory result) {
+    function mdsMultiply(uint256[3] memory state) internal view returns (uint256[3] memory result) {
         result[0] = addmod(
             addmod(
                 mulmod(getMdsValue(0, 0), state[0], FIELD_MODULUS),
@@ -106,9 +92,7 @@ contract Poseidon is PallasCurve, PallasConstants {
     /// @dev Core permutation function for Poseidon hash
     /// @param state Input state array
     /// @return uint256[3] Permuted state
-    function poseidonPermutation(
-        uint256[3] memory state
-    ) internal view returns (uint256[3] memory) {
+    function poseidonPermutation(uint256[3] memory state) internal view returns (uint256[3] memory) {
         for (uint256 round = 0; round < POSEIDON_FULL_ROUNDS; round++) {
             state[0] = power7(state[0]);
             state[1] = power7(state[1]);
@@ -116,21 +100,9 @@ contract Poseidon is PallasCurve, PallasConstants {
 
             state = mdsMultiply(state);
 
-            state[0] = addmod(
-                state[0],
-                getRoundConstant(round, 0),
-                FIELD_MODULUS
-            );
-            state[1] = addmod(
-                state[1],
-                getRoundConstant(round, 1),
-                FIELD_MODULUS
-            );
-            state[2] = addmod(
-                state[2],
-                getRoundConstant(round, 2),
-                FIELD_MODULUS
-            );
+            state[0] = addmod(state[0], getRoundConstant(round, 0), FIELD_MODULUS);
+            state[1] = addmod(state[1], getRoundConstant(round, 1), FIELD_MODULUS);
+            state[2] = addmod(state[2], getRoundConstant(round, 2), FIELD_MODULUS);
         }
         return state;
     }
@@ -140,10 +112,7 @@ contract Poseidon is PallasCurve, PallasConstants {
     /// @param state Current state array
     /// @param input Input values to process
     /// @return uint256[3] Updated state
-    function update(
-        uint256[3] memory state,
-        uint256[] memory input
-    ) internal view returns (uint256[3] memory) {
+    function update(uint256[3] memory state, uint256[] memory input) internal view returns (uint256[3] memory) {
         if (input.length == 0) {
             return poseidonPermutation(state);
         }
@@ -155,11 +124,7 @@ contract Poseidon is PallasCurve, PallasConstants {
                 state[0] = addmod(state[0], input[blockIndex], FIELD_MODULUS);
             }
             if (blockIndex + 1 < input.length) {
-                state[1] = addmod(
-                    state[1],
-                    input[blockIndex + 1],
-                    FIELD_MODULUS
-                );
+                state[1] = addmod(state[1], input[blockIndex + 1], FIELD_MODULUS);
             }
 
             state = poseidonPermutation(state);
@@ -174,9 +139,7 @@ contract Poseidon is PallasCurve, PallasConstants {
     /// @dev Processes bytes in little-endian order, matching o1js implementation
     /// @param prefix The string to convert
     /// @return uint256 Field element representation of the prefix
-    function prefixToField(
-        string memory prefix
-    ) internal pure returns (uint256) {
+    function prefixToField(string memory prefix) internal pure returns (uint256) {
         bytes memory prefixBytes = bytes(prefix);
         require(prefixBytes.length < 32, "prefix too long");
 
@@ -216,9 +179,7 @@ contract Poseidon is PallasCurve, PallasConstants {
     /// @dev Main hashing function without prefix
     /// @param input Array of field elements to hash
     /// @return uint256 Resulting hash
-    function poseidonHash(
-        uint256[] memory input
-    ) public view returns (uint256) {
+    function poseidonHash(uint256[] memory input) public view returns (uint256) {
         uint256[3] memory state = initialState();
         state = update(state, input);
 
@@ -230,10 +191,7 @@ contract Poseidon is PallasCurve, PallasConstants {
     /// @param prefix String prefix to prepend
     /// @param input Array of field elements to hash
     /// @return uint256 Resulting hash
-    function poseidonHashWithPrefix(
-        string memory prefix,
-        uint256[] memory input
-    ) public view returns (uint256) {
+    function poseidonHashWithPrefix(string memory prefix, uint256[] memory input) public view returns (uint256) {
         uint256[3] memory state = initialState();
 
         uint256[] memory prefixArray = new uint256[](1);
@@ -270,25 +228,18 @@ contract Poseidon is PallasCurve, PallasConstants {
             } lt(i, length) {
                 i := add(i, 1)
             } {
-                mstore(
-                    add(destPtr, mul(i, 0x20)),
-                    mload(add(srcPtr, mul(i, 0x20)))
-                )
+                mstore(add(destPtr, mul(i, 0x20)), mload(add(srcPtr, mul(i, 0x20))))
             }
             // Append public key and signature
             mstore(add(destPtr, mul(length, 0x20)), mload(publicKey))
-            mstore(
-                add(destPtr, mul(add(length, 1), 0x20)),
-                mload(add(publicKey, 0x20))
-            )
+            mstore(add(destPtr, mul(add(length, 1), 0x20)), mload(add(publicKey, 0x20)))
             mstore(add(destPtr, mul(add(length, 2), 0x20)), r)
         }
 
         // Use cached prefix value
         uint256[3] memory state = initialState();
         uint256[] memory prefixArray = new uint256[](1);
-        prefixArray[0] = keccak256(bytes(prefix)) ==
-            keccak256(bytes("MinaSignatureMainnet"))
+        prefixArray[0] = keccak256(bytes(prefix)) == keccak256(bytes("MinaSignatureMainnet"))
             ? MINA_PREFIX_FIELD
             : CODA_PREFIX_FIELD;
 

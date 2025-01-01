@@ -70,5 +70,8 @@
   "overrides": {
     "ethers": "^5.7.2",
     "hardhat-deploy": "^0.12.1"
+  },
+  "dependencies": {
+    "@layerzerolabs/lz-evm-oapp-v2": "^3.0.36"
   }
 }

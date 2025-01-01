@@ -2,10 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "./kimchi/Poseidon.sol";
-import { OAppSender, MessagingFee, MessagingReceipt } from "@layerzerolabs/oapp-evm/contracts/oapp/OAppSender.sol";
-import { MessagingParams } from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
-import { SetConfigParam } from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/IMessageLibManager.sol";
-import { OAppCore } from "@layerzerolabs/oapp-evm/contracts/oapp/OAppCore.sol";
+
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 error InvalidPublicKey();
@@ -16,7 +13,7 @@ error StepSkipped();
  * @dev Verifies signatures over fields generated using mina-signer.
  */
 
-contract PallasFieldsSignatureVerifier is Poseidon, OAppSender {
+contract PallasFieldsSignatureVerifier is Poseidon {
     /// @title Verify Fields State Structure
     /// @notice Holds the state for field array signature verification process
     /// @dev Used to track the progress and store intermediate results during verification
@@ -49,12 +46,7 @@ contract PallasFieldsSignatureVerifier is Poseidon, OAppSender {
         uint256[] fields;
     }
 
-    /// Delegate and Owner to be set as address(0) after configuring for no interactions from anyone.
-    constructor(
-        address _endpoint, // LayerZero endpoint address
-        address _delegate, // Address that can configure the OApp in the endpoint
-        address _owner
-    ) OAppCore(_endpoint, _delegate) Ownable(_owner) {}
+    uint8 constant TYPE_VERIFY_FIELDS = 2;
 
     /// @notice Counter for tracking total number of field verification processes
     /// @dev Incremented for each new verification process
@@ -67,6 +59,8 @@ contract PallasFieldsSignatureVerifier is Poseidon, OAppSender {
     /// @notice Maps verification IDs to their respective state structures
     /// @dev Main storage for verification process states
     mapping(uint256 => VerifyFieldsState) public vfLifeCycle;
+    mapping(uint256 => bytes) public vfLifeCycleBytes;
+    mapping(uint256 => bytes) public vfLifeCycleBytesCompressed;
 
     /// @notice Ensures only the creator of a verification process can access it
     /// @param id The verification process ID
@@ -90,11 +84,24 @@ contract PallasFieldsSignatureVerifier is Poseidon, OAppSender {
     }
 
     /// @notice Retrieves the complete state of a field verification process
-    /// @dev Returns a copy of the state, not a reference
     /// @param vfId The ID of the verification process
     /// @return state The complete verification state structure
     function getVFState(uint256 vfId) external view returns (VerifyFieldsState memory state) {
         return vfLifeCycle[vfId];
+    }
+
+    /// @notice Retrieves the complete state of a verification process in bytes
+    /// @param vfId The ID of the verification process
+    /// @return state The complete verification state structure in bytes
+    function getVFStateBytes(uint256 vfId) external view returns (bytes memory) {
+        return vfLifeCycleBytes[vfId];
+    }
+
+    /// @notice Retrieves the complete state of a verification process in bytes
+    /// @param vfId The ID of the verification process
+    /// @return state The complete verification state structure in bytes
+    function getVFStateBytesCompressed(uint256 vfId) external view returns (bytes memory) {
+        return vfLifeCycleBytesCompressed[vfId];
     }
 
     /// @notice Validates if a point lies on the Pallas curve
@@ -258,10 +265,58 @@ contract PallasFieldsSignatureVerifier is Poseidon, OAppSender {
         current.isValid = (R.x == sigR) && (R.y & 1 == 0);
         current.atStep = 6;
 
+        // bytes memory stateBytes = packVerifyFieldsState(current, vfId);
+        bytes memory stateBytesCompressed = packVerifyFieldsStateCompressed(current, vfId);
+        // vfLifeCycleBytes[vfId] = stateBytes;
+        vfLifeCycleBytesCompressed[vfId] = stateBytesCompressed;
+
         return current.isValid;
     }
 
-    function step_7_VF(uint256 vfId) external isValidVFId(vfId) {}
+    // function packVerifyFieldsState(VerifyFieldsState memory state, uint256 vfId) public pure returns (bytes memory) {
+    //     bytes memory fixedData = abi.encodePacked(
+    //         TYPE_VERIFY_FIELDS,
+    //         vfId,
+    //         state.init,
+    //         state.mainnet,
+    //         state.isValid,
+    //         state.atStep,
+    //         state.publicKey.x,
+    //         state.publicKey.y,
+    //         state.signature.r,
+    //         state.signature.s,
+    //         state.messageHash,
+    //         state.pkInGroup.x,
+    //         state.pkInGroup.y,
+    //         state.sG.x,
+    //         state.sG.y,
+    //         state.ePk.x,
+    //         state.ePk.y,
+    //         state.R.x,
+    //         state.R.y
+    //     );
+
+    //     return abi.encodePacked(fixedData, abi.encode(state.fields));
+    // }
+
+    function packVerifyFieldsStateCompressed(
+        VerifyFieldsState memory state,
+        uint256 vfId
+    ) public pure returns (bytes memory) {
+        bytes memory fixedData = abi.encodePacked(
+            TYPE_VERIFY_FIELDS,
+            vfId,
+            state.mainnet,
+            state.isValid,
+            state.publicKey.x,
+            state.publicKey.y,
+            state.signature.r,
+            state.signature.s,
+            state.messageHash
+        );
+
+        return abi.encodePacked(fixedData, abi.encode(state.fields));
+    }
 
     /// @notice Converts a string to its character array representation and computes its Poseidon hash
     /// @dev Matches the behavior of CircuitString.from(str).hash() from o1js
@@ -313,129 +368,5 @@ contract PallasFieldsSignatureVerifier is Poseidon, OAppSender {
         }
 
         return Point({ x: _x, y: _y });
-    }
-
-    // -------------- LAYERZERO FTW --------------
-    // -------------------------------------------
-
-    // Original Data → optimize() → Optimized Data → pack() → Bytes for Transmission
-    // (FieldsVerification) → (OptimizedFieldsVerification) → (bytes)
-
-    /// @notice LayerZero message version
-    uint16 private constant VERSION = 1;
-    uint16 private DEST_CHAIN_ID;
-
-    bytes32 private PEER;
-    /// @notice Default gas limit for optimistic execution on destination chain
-    uint256 private constant OPTIMISTIC_GAS = 100000;
-
-    /// @notice Emitted when a verification is sent cross-chain
-    /// @param payloadHash The keccak256 hash of the sent payload
-    /// @param isFieldVerification True if this is a field verification, false if message verification
-    event SingleVerificationSent(bytes32 indexed payloadHash, bool isFieldVerification);
-
-    /// CONFIGURATION FUNCTIONS ------------------------------------
-    // ChainId       : 42161
-    // EndpointId    : 30110
-    // EndpointV2    : 0x1a44076050125825900e736c501f859c50fE728c
-    // SendUln302    : 0x975bcD720be66659e3EB3C0e4F1866a3020E493A
-    // ReceiveUln302 : 0x7B9E184e07a6EE1aC23eAe0fe8D6Be2f663f05e6
-    // LZ Executor   : 0x31CAe3B7fB82d847621859fb1585353c5720660D
-    // LZ Dead DVN   : 0x758C419533ad64Ce9D3413BC8d3A97B026098EC1
-    // const sendTx = await endpointContract.setSendLibrary(
-    //   YOUR_OAPP_ADDRESS,
-    //   remoteEid,
-    //   YOUR_SEND_LIB_ADDRESS,
-    // );
-
-    function setConfig(uint32 _eid, uint32 _configType, bytes calldata _config) external onlyOwner {
-        SetConfigParam[] memory params = new SetConfigParam[](1);
-        params[0] = SetConfigParam({ eid: _eid, configType: _configType, config: _config });
-
-        endpoint.setConfig(address(this), address(0), params);
-    }
-
-    function setPeer(address _peer) external onlyOwner {
-        PEER = bytes32(abi.encodePacked(_peer));
-        _setPeer(DEST_CHAIN_ID, PEER);
-    }
-
-    function setDestChainId(uint16 _destChainId) external onlyOwner {
-        DEST_CHAIN_ID = _destChainId;
-    }
-
-    /// @notice Converts a standard FieldsVerification into an optimized format for cross-chain transmission
-    /// @param original The original FieldsVerification struct to optimize
-    /// @return An OptimizedFieldsVerification struct with compressed data
-    function optimizeFieldsVerification(
-        FieldsVerification memory original
-    ) internal pure returns (OptimizedFieldsVerification memory) {
-        OptimizedFieldsVerification memory optimized;
-
-        optimized.vfId = original.vfId; // Copy the ID
-        optimized.isValid = original.isValid;
-
-        optimized.fields = new bytes32[](original.fields.length);
-        for (uint256 i = 0; i < original.fields.length; i++) {
-            optimized.fields[i] = bytes32(original.fields[i]);
-        }
-
-        optimized.signature.r = bytes32(original.signature.r);
-        optimized.signature.s = bytes32(original.signature.s);
-
-        optimized.publicKey.x = bytes32(original.publicKey.x);
-        optimized.publicKey.y = bytes32(original.publicKey.y);
-
-        return optimized;
-    }
-
-    /// @notice Packs a field verification into bytes for cross-chain transmission
-    /// @param verification The optimized verification struct to pack
-    /// @return The packed bytes with a type identifier (1) followed by the verification data
-    function packSingleFieldsVerification(
-        OptimizedFieldsVerification memory verification
-    ) internal pure returns (bytes memory) {
-        return
-            abi.encodePacked(
-                uint8(1), // type identifier for fields verification
-                verification.vfId, // Add vfId to packed data
-                verification.isValid,
-                uint16(verification.fields.length),
-                verification.fields,
-                verification.signature.r,
-                verification.signature.s,
-                verification.publicKey.x,
-                verification.publicKey.y
-            );
-    }
-
-    /// @notice Sends a single field verification to another chain via LayerZero
-    /// @param verification The verification data to send
-    /// @dev Requires msg.value to cover LayerZero fees
-    function sendSingleFieldsVerification(FieldsVerification calldata verification) external payable {
-        OptimizedFieldsVerification memory optimized = optimizeFieldsVerification(verification);
-        bytes memory payload = packSingleFieldsVerification(optimized);
-        _sendPayload(payload, OPTIMISTIC_GAS);
-        emit SingleVerificationSent(keccak256(payload), true);
-    }
-
-    /// @notice Internal function to send payload through LayerZero
-    /// @param payload The encoded data to send
-    /// @param gasLimit Gas limit for execution on destination chain
-    /// @dev Uses VERSION for adapter parameters and optimistic execution
-    function _sendPayload(bytes memory payload, uint256 gasLimit) internal {
-        bytes memory options = abi.encodePacked(VERSION, gasLimit);
-        MessagingFee memory fee = _quote(
-            DEST_CHAIN_ID,
-            payload,
-            options,
-            false // not paying in LZ token
-        );
-
-        _lzSend(DEST_CHAIN_ID, payload, options, fee, payable(msg.sender));
-    }
-
-    function oAppVersion() public pure override returns (uint64 senderVersion, uint64 receiverVersion) {
-        return (1, 1);
     }
 }
