@@ -2,7 +2,6 @@
 pragma solidity ^0.8.20;
 
 import "./legacy/PoseidonLegacy.sol";
-import {ILayerZeroEndpoint, ILayerZeroReceiver} from "./interfaces/ILayerZero.sol";
 
 error InvalidPublicKey();
 error StepSkipped();
@@ -13,61 +12,11 @@ error StepSkipped();
  */
 
 contract PallasMessageSignatureVerifier is PoseidonLegacy {
+    /// @notice Identifier for the type of verification.
     uint8 constant TYPE_VERIFY_MESSAGE = 1;
-    mapping(uint256 => bytes) public vmLifeCycleBytesCompressed;
-
-    /// @title Verification Message State Structure
-    /// @notice Holds the state for message signature verification process
-    /// @dev Used to track the progress and store intermediate results during verification
-    struct VerifyMessageState {
-        /// @notice Indicates if the state has been properly initialized
-        bool init;
-        /// @notice Network flag - true for mainnet, false for testnet
-        bool mainnet;
-        /// @notice Final verification result
-        bool isValid;
-        /// @notice Tracks the current step of verification (0-6)
-        uint8 atStep;
-        /// @notice The public key point (x,y) being verified against
-        Point publicKey;
-        /// @notice The signature containing r (x-coordinate) and s (scalar)
-        Signature signature;
-        /// @notice Stores the computed hash of the message
-        uint256 messageHash;
-        /// @notice Public key converted to group form
-        Point pkInGroup;
-        /// @notice Result of scalar multiplication s*G
-        Point sG;
-        /// @notice Result of scalar multiplication e*pkInGroup
-        Point ePk;
-        /// @notice Final computed point R = sG - ePk
-        Point R;
-        /// @notice The message being verified
-        string message;
-        /// @notice Network-specific prefix for message hashing
-        string prefix;
-    }
-    struct VerifyMessageStateCompressed {
-        uint8 verifyType;
-        uint256 vmId;
-        /// @notice Network flag - true for mainnet, false for testnet
-        bool mainnet;
-        /// @notice Final verification result
-        bool isValid;
-        /// @notice The public key point (x,y) being verified against
-        Point publicKey;
-        /// @notice The signature containing r (x-coordinate) and s (scalar)
-        Signature signature;
-        /// @notice Stores the computed hash of the message
-        uint256 messageHash;
-        /// @notice Network-specific prefix for message hashing
-        string prefix;
-        /// @notice The message being verified
-        string message;
-    }
 
     /// @notice Counter for tracking total number of verification processes
-    /// @dev Incremented for each new verification process
+    /// @dev Used as a unique ID. Incremented for each new verification process
     uint256 public vmCounter = 0;
 
     /// @notice Maps verification IDs to their creators' addresses
@@ -77,6 +26,10 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy {
     /// @notice Maps verification IDs to their respective state structures
     /// @dev Main storage for verification process states
     mapping(uint256 => VerifyMessageState) public vmLifeCycle;
+
+    /// @notice Maps verification IDs to their respective state structures compressed into bytes form.
+    /// Doesn't store intermediate states but only the important bits.
+    mapping(uint256 => bytes) public vmLifeCycleBytesCompressed;
 
     /// @notice Ensures only the creator of a verification process can access it
     /// @param id The verification process ID
@@ -109,28 +62,13 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy {
         return vmLifeCycle[vmId];
     }
 
-    /// @notice Validates if a point lies on the Pallas curve
-    /// @dev Checks if the point coordinates satisfy the curve equation y² = x³ + 5
-    /// @param point The point to validate with x and y coordinates
-    /// @return bool True if the point lies on the curve, false otherwise
-    function isValidPublicKey(Point memory point) public pure returns (bool) {
-        if (point.x >= FIELD_MODULUS || point.y >= FIELD_MODULUS) {
-            return false;
-        }
-
-        uint256 x2 = mulmod(point.x, point.x, FIELD_MODULUS);
-        uint256 lhs = mulmod(point.y, point.y, FIELD_MODULUS);
-        return
-            lhs == addmod(mulmod(x2, point.x, FIELD_MODULUS), 5, FIELD_MODULUS);
-    }
-
     /// @notice Retrieves the complete state of a verification process in bytes
-    /// @param vfId The ID of the verification process
+    /// @param vmId The ID of the verification process
     /// @return state The complete verification state structure in bytes
     function getVMStateBytesCompressed(
-        uint256 vfId
+        uint256 vmId
     ) external view returns (bytes memory) {
-        return vmLifeCycleBytesCompressed[vfId];
+        return vmLifeCycleBytesCompressed[vmId];
     }
 
     /// @notice Decodes a compressed byte array into a VerifyMessageStateCompressed struct
@@ -184,6 +122,21 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy {
 
         state.message = abi.decode(data[195:], (string));
         return state;
+    }
+
+    /// @notice Validates if a point lies on the Pallas curve
+    /// @dev Checks if the point coordinates satisfy the curve equation y² = x³ + 5
+    /// @param point The point to validate with x and y coordinates
+    /// @return bool True if the point lies on the curve, false otherwise
+    function isValidPublicKey(Point memory point) public pure returns (bool) {
+        if (point.x >= FIELD_MODULUS || point.y >= FIELD_MODULUS) {
+            return false;
+        }
+
+        uint256 x2 = mulmod(point.x, point.x, FIELD_MODULUS);
+        uint256 lhs = mulmod(point.y, point.y, FIELD_MODULUS);
+        return
+            lhs == addmod(mulmod(x2, point.x, FIELD_MODULUS), 5, FIELD_MODULUS);
     }
 
     /// @notice Zero step - Input assignment for message verification
@@ -358,6 +311,11 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy {
         return current.isValid;
     }
 
+    /// @notice Packs a VerifyMessageState into a compressed bytes format for efficient storage
+    /// @dev Combines fixed-length data with the dynamic message string using abi.encodePacked and abi.encode
+    /// @param state The VerifyMessageState to be compressed
+    /// @param vmId The unique identifier for this message verification state
+    /// @return bytes The packed binary representation of the state
     function packVerifyMessageStateCompressed(
         VerifyMessageState memory state,
         uint256 vmId

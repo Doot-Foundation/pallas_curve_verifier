@@ -10,6 +10,7 @@ import { Origin } from "@layerzerolabs/oapp-evm/contracts/oapp/OApp.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { OptionsBuilder } from "@layerzerolabs/oapp-evm/contracts/oapp/libs/OptionsBuilder.sol";
 import { MessagingFee, MessagingReceipt } from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
+
 /// ETHEREUM MAINNET
 /// Channel Ids : 4294967295, 4294967294
 /// ReadLib1002 (Origin Chain Library) : 0x74F55Bc2a79A27A0bF1D1A35dB5d0Fc36b9FDB9D
@@ -28,18 +29,19 @@ struct ChainConfig {
 contract PallasVerificationReceiever is OAppRead {
     address verifyFieldsContract = address(0);
     address verifyMessageContract = address(0);
+
     string constant MAINNET_PREFIX = "MinaSignatureMainnet";
     string constant TESTNET_PREFIX = "CodaSignature*******";
+
     uint8 constant TYPE_VERIFY_MESSAGE = 1;
     uint8 constant TYPE_VERIFY_FIELDS = 2;
-    uint8 internal constant MAP_ONLY = 0;
-    uint8 internal constant REDUCE_ONLY = 1;
-    uint8 internal constant MAP_AND_REDUCE = 2;
-    uint8 internal constant NONE = 3;
+    uint8 constant SETTING_NONE = 3;
+
     uint32 constant READ_CHANNEL_EID_THRESHOLD = 4294965694;
-    uint32 constant ETH_READ_CHANNEL = 4294967295;
+    uint32 constant READ_CHANNEL_ID = 4294967295;
     uint32 constant ARB_ENDPOINT_ID = 30110;
     uint32 constant ETH_ENDPOINT_ID = 30101;
+
     ChainConfig CHAIN_CONFIG_VF = ChainConfig({ confirmations: 3, toReadFrom: verifyFieldsContract });
     ChainConfig CHAIN_CONFIG_VM = ChainConfig({ confirmations: 3, toReadFrom: verifyMessageContract });
 
@@ -154,7 +156,7 @@ contract PallasVerificationReceiever is OAppRead {
         /// @dev An additional requirement for _options is to profile the calldata size of your returned data type.
         bytes memory _options = OptionsBuilder.newOptions();
         _options = OptionsBuilder.addExecutorLzReadOption(_options, gasLimit, calldataSize, 0);
-        return _lzSend(ETH_READ_CHANNEL, _cmd, _options, MessagingFee(msg.value, 0), payable(msg.sender));
+        return _lzSend(READ_CHANNEL_ID, _cmd, _options, MessagingFee(msg.value, 0), payable(msg.sender));
     }
 
     function getCmd(uint8 verifyType, uint256 id) public view returns (bytes memory) {
@@ -188,7 +190,7 @@ contract PallasVerificationReceiever is OAppRead {
         }
 
         EVMCallComputeV1 memory computeSettings = EVMCallComputeV1({
-            computeSetting: NONE,
+            computeSetting: SETTING_NONE,
             targetEid: ETH_ENDPOINT_ID,
             isBlockNum: false,
             blockNumOrTimestamp: uint64(block.timestamp),

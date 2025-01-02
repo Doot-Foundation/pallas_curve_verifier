@@ -2,7 +2,6 @@
 pragma solidity ^0.8.20;
 
 import "./kimchi/Poseidon.sol";
-import {ILayerZeroEndpoint, ILayerZeroReceiver} from "./interfaces/ILayerZero.sol";
 
 error InvalidPublicKey();
 error StepSkipped();
@@ -13,64 +12,12 @@ error StepSkipped();
  */
 
 contract PallasFieldsSignatureVerifier is Poseidon {
+    /// @notice Identifier for the type of verification.
     uint8 constant TYPE_VERIFY_FIELDS = 2;
-    mapping(uint256 => bytes) public vfLifeCycleBytesCompressed;
 
-    /// @title Verify Fields State Structure
-    /// @notice Holds the state for field array signature verification process
-    /// @dev Used to track the progress and store intermediate results during verification
-    struct VerifyFieldsState {
-        /// @notice Indicates if the state has been properly initialized
-        bool init;
-        /// @notice Network flag - true for mainnet, false for testnet
-        bool mainnet;
-        /// @notice Final verification result
-        bool isValid;
-        /// @notice Tracks the current step of verification (0-6)
-        uint8 atStep;
-        /// @notice The public key point (x,y) being verified against
-        Point publicKey;
-        /// @notice The signature containing r (x-coordinate) and s (scalar)
-        Signature signature;
-        /// @notice Hash of the fields array with prefix ('e' value)
-        uint256 messageHash;
-        /// @notice Public key converted to curve point format
-        Point pkInGroup;
-        /// @notice Result of scalar multiplication s*G
-        Point sG;
-        /// @notice Result of scalar multiplication e*pkInGroup
-        Point ePk;
-        /// @notice Final computed point R = sG - ePk
-        Point R;
-        /// @notice Network-specific prefix for message hashing
-        string prefix;
-        /// @notice Array of field elements to verify
-        uint256[] fields;
-    }
-    struct VerifyFieldsStateCompressed {
-        uint8 verifyType;
-        uint256 vfId;
-        /// @notice Network flag - true for mainnet, false for testnet
-        bool mainnet;
-        /// @notice Final verification result
-        bool isValid;
-        /// @notice The public key point (x,y) being verified against
-        Point publicKey;
-        /// @notice The signature containing r (x-coordinate) and s (scalar)
-        Signature signature;
-        /// @notice Hash of the fields array with prefix ('e' value)
-        uint256 messageHash;
-        /// @notice Network-specific prefix for message hashing
-        string prefix;
-        /// @notice Array of field elements to verify
-        uint256[] fields;
-    }
-
-    // uint256 private constant EVEN_CHECK_MASK = 1;
-
-    /// @notice Counter for tracking total number of field verification processes
-    /// @dev Incremented for each new verification process
-    uint256 public vfCounter = 1;
+    /// @notice Counter for tracking total number of field verification processes.
+    /// @dev Used as a unique ID. Incremented for each new verification process
+    uint256 public vfCounter = 0;
 
     /// @notice Maps verification IDs to their creators' addresses
     /// @dev Used for access control in cleanup operations
@@ -79,6 +26,10 @@ contract PallasFieldsSignatureVerifier is Poseidon {
     /// @notice Maps verification IDs to their respective state structures
     /// @dev Main storage for verification process states
     mapping(uint256 => VerifyFieldsState) public vfLifeCycle;
+
+    /// @notice Maps verification IDs to their respective state structures compressed into bytes form.
+    /// Doesn't store intermediate states but only the important bits.
+    mapping(uint256 => bytes) public vfLifeCycleBytesCompressed;
 
     /// @notice Ensures only the creator of a verification process can access it
     /// @param id The verification process ID
@@ -109,21 +60,6 @@ contract PallasFieldsSignatureVerifier is Poseidon {
         uint256 vfId
     ) external view returns (VerifyFieldsState memory state) {
         return vfLifeCycle[vfId];
-    }
-
-    /// @notice Validates if a point lies on the Pallas curve
-    /// @dev Checks if the point coordinates satisfy the curve equation y² = x³ + 5
-    /// @param point The point to validate with x and y coordinates
-    /// @return bool True if the point lies on the curve, false otherwise
-    function isValidPublicKey(Point memory point) public pure returns (bool) {
-        if (point.x >= FIELD_MODULUS || point.y >= FIELD_MODULUS) {
-            return false;
-        }
-
-        uint256 x2 = mulmod(point.x, point.x, FIELD_MODULUS);
-        uint256 lhs = mulmod(point.y, point.y, FIELD_MODULUS);
-        return
-            lhs == addmod(mulmod(x2, point.x, FIELD_MODULUS), 5, FIELD_MODULUS);
     }
 
     /// @notice Retrieves the complete state of a verification process in bytes
@@ -163,7 +99,6 @@ contract PallasFieldsSignatureVerifier is Poseidon {
         uint256 messageHash;
 
         assembly {
-            // Load all values first
             x := calldataload(add(data.offset, 35))
             y := calldataload(add(data.offset, 67))
             r := calldataload(add(data.offset, 99))
@@ -171,7 +106,6 @@ contract PallasFieldsSignatureVerifier is Poseidon {
             messageHash := calldataload(add(data.offset, 163))
         }
 
-        // Then assign to struct fields
         state.publicKey.x = x;
         state.publicKey.y = y;
         state.signature.r = r;
@@ -181,6 +115,21 @@ contract PallasFieldsSignatureVerifier is Poseidon {
 
         state.fields = abi.decode(data[195:], (uint256[]));
         return state;
+    }
+
+    /// @notice Validates if a point lies on the Pallas curve
+    /// @dev Checks if the point coordinates satisfy the curve equation y² = x³ + 5
+    /// @param point The point to validate with x and y coordinates
+    /// @return bool True if the point lies on the curve, false otherwise
+    function isValidPublicKey(Point memory point) public pure returns (bool) {
+        if (point.x >= FIELD_MODULUS || point.y >= FIELD_MODULUS) {
+            return false;
+        }
+
+        uint256 x2 = mulmod(point.x, point.x, FIELD_MODULUS);
+        uint256 lhs = mulmod(point.y, point.y, FIELD_MODULUS);
+        return
+            lhs == addmod(mulmod(x2, point.x, FIELD_MODULUS), 5, FIELD_MODULUS);
     }
 
     /// @notice Zero step - Input assignment.
@@ -346,7 +295,11 @@ contract PallasFieldsSignatureVerifier is Poseidon {
         return current.isValid;
     }
 
-    // TODO : KEEP PK, SIG AND MESSAGE HASH ENCODE FULL.
+    /// @notice Packs a VerifyFieldsState into a compressed bytes format for efficient storage
+    /// @dev Combines fixed-length and dynamic data using abi.encodePacked and abi.encode
+    /// @param state The VerifyFieldsState to be compressed
+    /// @param vfId The unique identifier for this verification state
+    /// @return bytes The packed binary representation of the state
     function packVerifyFieldsStateCompressed(
         VerifyFieldsState memory state,
         uint256 vfId
