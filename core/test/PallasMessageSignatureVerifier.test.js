@@ -103,7 +103,14 @@ describe("PallasMessageSignatureVerifier", function () {
 
       const finalObject = await verifier.getVMState(vmId);
       const bytesObject = await verifier.getVMStateBytesCompressed(vmId);
-      const decodedjs = decodeVMStateBytesCompressed(bytesObject);
+
+      const decodedsol_gas =
+        await verifier.decodeVMStateBytesCompressed.estimateGas(bytesObject);
+      // console.log(decodedsol_gas);
+      const decodedsol = await verifier.decodeVMStateBytesCompressed(
+        bytesObject
+      );
+      // console.log(decodedsol);
 
       expect(finalObject[2]).to.equal(result);
       expect(finalObject[2]).to.equal(true);

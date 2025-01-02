@@ -1,9 +1,11 @@
 //SPDX-License-Identifier:MIT
-pragma solidity 0.8.20;
+pragma solidity ^0.8.20;
 
 import "../PallasTypes.sol";
 
 struct VerifyMessageStateCompressed {
+    uint8 verifyType;
+    uint256 vmId;
     /// @notice Network flag - true for mainnet, false for testnet
     bool mainnet;
     /// @notice Final verification result

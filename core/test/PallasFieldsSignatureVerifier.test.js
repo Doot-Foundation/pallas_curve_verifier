@@ -252,7 +252,14 @@ describe("PallasFieldsSignatureVerifier", function () {
 
       const finalObject = await verifier.getVFState(vfId);
       const bytesObject = await verifier.getVFStateBytesCompressed(vfId);
-      const decodedjs = decodeVFStateBytesCompressed(bytesObject);
+
+      const decodedsol_gas =
+        await verifier.decodeVFStateBytesCompressed.estimateGas(bytesObject);
+      // console.log(decodedsol_gas);
+      const decodedsol = await verifier.decodeVFStateBytesCompressed(
+        bytesObject
+      );
+      // console.log(decodedsol);
 
       expect(finalObject[2]).to.equal(result);
       expect(finalObject[2]).to.equal(true);

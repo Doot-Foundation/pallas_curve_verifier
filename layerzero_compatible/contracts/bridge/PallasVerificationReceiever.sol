@@ -53,68 +53,78 @@ contract PallasVerificationReceiever is OAppRead {
 
     constructor(address _endpoint, address _delegate) OAppRead(_endpoint, _delegate) Ownable(_delegate) {}
 
-    function addressToBytes32(address _addr) internal returns (bytes32) {
+    function addressToBytes32(address _addr) public pure returns (bytes32) {
         return bytes32(uint256(uint160(_addr)));
     }
 
     function unpackVerifyMessageState(
-        bytes memory data
-    ) public pure returns (uint256, VerifyMessageStateCompressed memory) {
-        (
-            uint8 verifyType,
-            uint256 id,
-            bool mainnet,
-            bool isValid,
-            uint256 publicKeyX,
-            uint256 publicKeyY,
-            uint256 signatureR,
-            uint256 signatureS,
-            uint256 messageHash,
-            string memory message
-        ) = abi.decode(data, (uint8, uint256, bool, bool, uint256, uint256, uint256, uint256, uint256, string));
+        bytes calldata data
+    ) internal pure returns (uint256 id, VerifyMessageStateCompressed memory state) {
+        state.verifyType = uint8(data[0]);
+        state.vmId = uint256(bytes32(data[1:33]));
+        state.mainnet = (data[33] != 0);
+        state.isValid = (data[34] != 0);
 
-        return (
-            id,
-            VerifyMessageStateCompressed({
-                mainnet: mainnet,
-                isValid: isValid,
-                publicKey: Point({ x: publicKeyX, y: publicKeyY }),
-                signature: Signature({ r: signatureR, s: signatureS }),
-                messageHash: messageHash,
-                prefix: mainnet ? MAINNET_PREFIX : TESTNET_PREFIX,
-                message: message
-            })
-        );
+        uint256 x;
+        uint256 y;
+        uint256 r;
+        uint256 s;
+        uint256 messageHash;
+
+        assembly {
+            // Load all values first
+            x := calldataload(add(data.offset, 35))
+            y := calldataload(add(data.offset, 67))
+            r := calldataload(add(data.offset, 99))
+            s := calldataload(add(data.offset, 131))
+            messageHash := calldataload(add(data.offset, 163))
+        }
+
+        // Then assign to struct fields
+        state.publicKey.x = x;
+        state.publicKey.y = y;
+        state.signature.r = r;
+        state.signature.s = s;
+        state.messageHash = messageHash;
+        state.prefix = "CodaSignature*******";
+
+        state.message = abi.decode(data[195:], (string));
+        return (state.vmId, state);
     }
 
     function unpackVerifyFieldsState(
-        bytes memory data
-    ) public pure returns (uint256, VerifyFieldsStateCompressed memory) {
-        (
-            uint8 verifyType,
-            uint256 id,
-            bool mainnet,
-            bool isValid,
-            uint256 publicKeyX,
-            uint256 publicKeyY,
-            uint256 signatureR,
-            uint256 signatureS,
-            uint256 messageHash,
-            uint256[] memory fields
-        ) = abi.decode(data, (uint8, uint256, bool, bool, uint256, uint256, uint256, uint256, uint256, uint256[]));
+        bytes calldata data
+    ) internal pure returns (uint256 id, VerifyFieldsStateCompressed memory state) {
+        state.verifyType = uint8(data[0]);
+        state.vfId = uint256(bytes32(data[1:33]));
+        state.mainnet = (data[33] != 0);
+        state.isValid = (data[34] != 0);
 
-        return (
-            id,
-            VerifyFieldsStateCompressed({
-                mainnet: mainnet,
-                isValid: isValid,
-                publicKey: Point({ x: publicKeyX, y: publicKeyY }),
-                signature: Signature({ r: signatureR, s: signatureS }),
-                messageHash: messageHash,
-                prefix: mainnet ? MAINNET_PREFIX : TESTNET_PREFIX,
-                fields: fields
-            })
-        );
+        uint256 x;
+        uint256 y;
+        uint256 r;
+        uint256 s;
+        uint256 messageHash;
+
+        assembly {
+            // Load all values first
+            x := calldataload(add(data.offset, 35))
+            y := calldataload(add(data.offset, 67))
+            r := calldataload(add(data.offset, 99))
+            s := calldataload(add(data.offset, 131))
+            messageHash := calldataload(add(data.offset, 163))
+        }
+
+        // Then assign to struct fields
+        state.publicKey.x = x;
+        state.publicKey.y = y;
+        state.signature.r = r;
+        state.signature.s = s;
+        state.messageHash = messageHash;
+        state.prefix = "CodaSignature*******";
+
+        state.fields = abi.decode(data[195:], (uint256[]));
+        return (state.vfId, state);
     }
 
     function readGetBytesCompressed(
