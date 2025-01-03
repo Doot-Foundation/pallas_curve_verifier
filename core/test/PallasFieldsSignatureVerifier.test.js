@@ -61,7 +61,6 @@ describe("PallasFieldsSignatureVerifier", function () {
         998899999999999999999999999999999999999999999999999999n,
         998899999999999999999999999999999999999999999999999999n,
         998899999999999999999999999999999999999999999999999999n,
-        998899999999999999999999999999n,
         998899999999999999999999999999999999999999999999999999n,
         998899999999999999999999999999999999999999999999999999n,
         998899999999999999999999999999999999999999999999999999n,
@@ -83,16 +82,10 @@ describe("PallasFieldsSignatureVerifier", function () {
         998899999999999999999999999999999999999999999999999999n,
         998899999999999999999999999999999999999999999999999999n,
         998899999999999999999999999999999999999999999999999999n,
-        998899999999999999999999999999999999999999999999999999n,
-        998899999999999999999999999999999999999999999999999999n,
-        998899999999999999999999999999999999999999999999999999n,
-        998899999999999999999999999999999999999999999999999999n,
-        998899999999999999999999999999999999999999999999999999n,
-        998899999999999999999999999999999999999999999999999999n,
-        998899999999999999999999999999999999999999999999999999n,
-        998899999999999999999999999999999999999999999999999999n,
-        998899999999999999999999999999n,
       ];
+
+      console.log("ORIGINAL DATA LENGTH :", fields.length);
+
       const signedFields = client.signFields(fields, keypair.privateKey);
 
       const altFields = [
@@ -212,14 +205,14 @@ describe("PallasFieldsSignatureVerifier", function () {
 
       const finalObject = await verifier.getVFState(vfId);
       const bytesObject = await verifier.getVFStateBytesCompressed(vfId);
-
+      console.log("Bytes Length : ", bytesObject.length);
       const decodedsol_gas =
         await verifier.decodeVFStateBytesCompressed.estimateGas(bytesObject);
-      // console.log(decodedsol_gas);
+      console.log("Decoding gas : ", decodedsol_gas);
+
       const decodedsol = await verifier.decodeVFStateBytesCompressed(
         bytesObject
       );
-      // console.log(decodedsol);
 
       expect(finalObject[2]).to.equal(result);
       expect(finalObject[2]).to.equal(true);

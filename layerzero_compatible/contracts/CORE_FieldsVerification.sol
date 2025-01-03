@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.20;
 
 import "./kimchi/Poseidon.sol";
-
-import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 error InvalidPublicKey();
 error StepSkipped();
@@ -14,42 +12,11 @@ error StepSkipped();
  */
 
 contract PallasFieldsSignatureVerifier is Poseidon {
-    /// @title Verify Fields State Structure
-    /// @notice Holds the state for field array signature verification process
-    /// @dev Used to track the progress and store intermediate results during verification
-    struct VerifyFieldsState {
-        /// @notice Indicates if the state has been properly initialized
-        bool init;
-        /// @notice Network flag - true for mainnet, false for testnet
-        bool mainnet;
-        /// @notice Final verification result
-        bool isValid;
-        /// @notice Tracks the current step of verification (0-6)
-        uint8 atStep;
-        /// @notice The public key point (x,y) being verified against
-        Point publicKey;
-        /// @notice The signature containing r (x-coordinate) and s (scalar)
-        Signature signature;
-        /// @notice Hash of the fields array with prefix ('e' value)
-        uint256 messageHash;
-        /// @notice Public key converted to curve point format
-        Point pkInGroup;
-        /// @notice Result of scalar multiplication s*G
-        Point sG;
-        /// @notice Result of scalar multiplication e*pkInGroup
-        Point ePk;
-        /// @notice Final computed point R = sG - ePk
-        Point R;
-        /// @notice Network-specific prefix for message hashing
-        string prefix;
-        /// @notice Array of field elements to verify
-        uint256[] fields;
-    }
-
+    /// @notice Identifier for the type of verification.
     uint8 constant TYPE_VERIFY_FIELDS = 2;
 
-    /// @notice Counter for tracking total number of field verification processes
-    /// @dev Incremented for each new verification process
+    /// @notice Counter for tracking total number of field verification processes.
+    /// @dev Used as a unique ID. Incremented for each new verification process
     uint256 public vfCounter = 0;
 
     /// @notice Maps verification IDs to their creators' addresses
@@ -59,7 +26,9 @@ contract PallasFieldsSignatureVerifier is Poseidon {
     /// @notice Maps verification IDs to their respective state structures
     /// @dev Main storage for verification process states
     mapping(uint256 => VerifyFieldsState) public vfLifeCycle;
-    mapping(uint256 => bytes) public vfLifeCycleBytes;
+
+    /// @notice Maps verification IDs to their respective state structures compressed into bytes form.
+    /// Doesn't store intermediate states but only the important bits.
     mapping(uint256 => bytes) public vfLifeCycleBytesCompressed;
 
     /// @notice Ensures only the creator of a verification process can access it
@@ -84,6 +53,7 @@ contract PallasFieldsSignatureVerifier is Poseidon {
     }
 
     /// @notice Retrieves the complete state of a field verification process
+    /// @dev Returns a copy of the state, not a reference
     /// @param vfId The ID of the verification process
     /// @return state The complete verification state structure
     function getVFState(uint256 vfId) external view returns (VerifyFieldsState memory state) {
@@ -93,15 +63,54 @@ contract PallasFieldsSignatureVerifier is Poseidon {
     /// @notice Retrieves the complete state of a verification process in bytes
     /// @param vfId The ID of the verification process
     /// @return state The complete verification state structure in bytes
-    function getVFStateBytes(uint256 vfId) external view returns (bytes memory) {
-        return vfLifeCycleBytes[vfId];
-    }
-
-    /// @notice Retrieves the complete state of a verification process in bytes
-    /// @param vfId The ID of the verification process
-    /// @return state The complete verification state structure in bytes
     function getVFStateBytesCompressed(uint256 vfId) external view returns (bytes memory) {
         return vfLifeCycleBytesCompressed[vfId];
+    }
+
+    /// @notice Decodes a compressed byte array into a VerifyFieldsStateCompressed struct
+    /// @param data The compressed bytes containing all VF state fields. Expected minimum length is 195 bytes
+    ///             plus additional bytes for the dynamic fields array
+    /// @return state The decoded VerifyFieldsStateCompressed struct containing:
+    ///               - verifyType (1 byte)
+    ///               - vfId (32 bytes)
+    ///               - mainnet flag (1 byte)
+    ///               - isValid flag (1 byte)
+    ///               - publicKey (x,y coordinates, 64 bytes)
+    ///               - signature (r,s values, 64 bytes)
+    ///               - messageHash (32 bytes)
+    ///               - prefix (constant string)
+    ///               - fields (dynamic uint256 array starting at byte 195)
+    function decodeVFStateBytesCompressed(
+        bytes calldata data
+    ) external pure returns (VerifyFieldsStateCompressed memory state) {
+        state.verifyType = uint8(data[0]);
+        state.vfId = uint256(bytes32(data[1:33]));
+        state.mainnet = (data[33] != 0);
+        state.isValid = (data[34] != 0);
+
+        uint256 x;
+        uint256 y;
+        uint256 r;
+        uint256 s;
+        uint256 messageHash;
+
+        assembly {
+            x := calldataload(add(data.offset, 35))
+            y := calldataload(add(data.offset, 67))
+            r := calldataload(add(data.offset, 99))
+            s := calldataload(add(data.offset, 131))
+            messageHash := calldataload(add(data.offset, 163))
+        }
+
+        state.publicKey.x = x;
+        state.publicKey.y = y;
+        state.signature.r = r;
+        state.signature.s = s;
+        state.messageHash = messageHash;
+        state.prefix = "CodaSignature*******";
+
+        state.fields = abi.decode(data[195:], (uint256[]));
+        return state;
     }
 
     /// @notice Validates if a point lies on the Pallas curve
@@ -271,6 +280,11 @@ contract PallasFieldsSignatureVerifier is Poseidon {
         return current.isValid;
     }
 
+    /// @notice Packs a VerifyFieldsState into a compressed bytes format for efficient storage
+    /// @dev Combines fixed-length and dynamic data using abi.encodePacked and abi.encode
+    /// @param state The VerifyFieldsState to be compressed
+    /// @param vfId The unique identifier for this verification state
+    /// @return bytes The packed binary representation of the state
     function packVerifyFieldsStateCompressed(
         VerifyFieldsState memory state,
         uint256 vfId

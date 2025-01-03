@@ -29,8 +29,11 @@ describe("PallasMessageSignatureVerifier", function () {
         publicKey: "B62qj2vSpa1MEXNPZAkLdEzQdRS9iE8NhhRfpqLCAvW6QCPi8fxAYnM",
       };
 
+      /// 500 Chars.
       const message =
-        "Sign this message to prove you have access to this wallet. You will be logged in automatically.Sign this message to prove you have access to this wallet. You will be logged in automatically.Sign this message to prove you have access to this wallet. You will be logged in automatically.Sign this message to prove you have access to this wallet. You will be logged in automatically.Sign this message to prove you have access to this wallet. You will be logged in automatically.";
+        "bDmpUjsjyweJ34mNnMZX9ChTJ2WPiOmGbPq2JoMb4uCgbycxkcokERLwtjeHaOMXuEpxeaOPxDRFJJ0WCQKuqLo1OJkoqbpEjWkraP5X31auEKVESSIFu2JbxwL86socv4DOtx3vgHz9I6DShg22KOhOHQBntWLxiMLLeRBIhBcEEvuzy6kEhhXaOVfN7TNvVUgupXZqeeoysxlrQ8zsn0KJ1sOcDQnUNYiZ2bsJgAVFj3s4mp2O0R1232";
+
+      console.log("ORIGINAL DATA LENGTH :", message.length);
 
       // Get signed message
       const signedMessage = client.signMessage(message, keypair.privateKey);
@@ -103,10 +106,11 @@ describe("PallasMessageSignatureVerifier", function () {
 
       const finalObject = await verifier.getVMState(vmId);
       const bytesObject = await verifier.getVMStateBytesCompressed(vmId);
-
+      console.log("Bytes Length : ", bytesObject.length);
       const decodedsol_gas =
         await verifier.decodeVMStateBytesCompressed.estimateGas(bytesObject);
-      // console.log(decodedsol_gas);
+      console.log("Decoding gas : ", decodedsol_gas);
+
       const decodedsol = await verifier.decodeVMStateBytesCompressed(
         bytesObject
       );

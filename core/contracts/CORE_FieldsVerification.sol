@@ -32,16 +32,16 @@ contract PallasFieldsSignatureVerifier is Poseidon {
     mapping(uint256 => bytes) public vfLifeCycleBytesCompressed;
 
     /// @notice Ensures only the creator of a verification process can access it
-    /// @param id The verification process ID
-    modifier isVFCreator(uint256 id) {
-        if (msg.sender != vfLifeCycleCreator[id]) revert();
+    /// @param vfId The verification process ID
+    modifier isVFCreator(uint256 vfId) {
+        if (msg.sender != vfLifeCycleCreator[vfId]) revert();
         _;
     }
 
     /// @notice Ensures the verification ID exists
-    /// @param id The verification process ID to check
-    modifier isValidVFId(uint256 id) {
-        if (id >= vfCounter) revert();
+    /// @param vfId The verification process ID to check
+    modifier isValidVFId(uint256 vfId) {
+        if (vfId >= vfCounter) revert();
         _;
     }
 
@@ -134,19 +134,19 @@ contract PallasFieldsSignatureVerifier is Poseidon {
 
     /// @notice Zero step - Input assignment.
     /// ==================================================
-    /// @param _publicKey The public key point (x,y)
-    /// @param _signature Contains r (x-coordinate) and s (scalar)
-    /// @param _fields Array of field elements to verify
-    /// @param _network Network identifier (mainnet/testnet).
+    /// @param publicKey The public key point (x,y)
+    /// @param signature Contains r (x-coordinate) and s (scalar)
+    /// @param fields Array of field elements to verify
+    /// @param network Network identifier (mainnet/testnet).
     /// Note for _network : It doesn't matter what we use since mina-signer uses 'testnet' regardless
     /// of the network set.
     function step_0_VF_assignValues(
-        Point calldata _publicKey,
-        Signature calldata _signature,
-        uint256[] calldata _fields,
-        bool _network
+        Point calldata publicKey,
+        Signature calldata signature,
+        uint256[] calldata fields,
+        bool network
     ) external returns (uint256) {
-        if (!isValidPublicKey(_publicKey)) revert InvalidPublicKey();
+        if (!isValidPublicKey(publicKey)) revert InvalidPublicKey();
 
         uint256 toSetId = vfCounter++;
 
@@ -154,10 +154,10 @@ contract PallasFieldsSignatureVerifier is Poseidon {
         // Pack initialization in optimal order
         toPush.atStep = 0;
         toPush.init = true;
-        toPush.mainnet = _network;
-        toPush.publicKey = _publicKey;
-        toPush.signature = _signature;
-        toPush.fields = _fields;
+        toPush.mainnet = network;
+        toPush.publicKey = publicKey;
+        toPush.signature = signature;
+        toPush.fields = fields;
         toPush.prefix = "CodaSignature*******";
 
         vfLifeCycleCreator[toSetId] = msg.sender;
