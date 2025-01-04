@@ -32,6 +32,10 @@ struct QuoteResult {
     uint256 lzTokenFee;
 }
 
+/// @notice Structure to hold read configs
+/// @param gasLimit Gas limit for the transaction
+/// @param messageSize Size of the original string(bytes)
+/// @param fieldsSize Size of the original fields array(bytes)
 struct ModeConfig {
     uint128 gasLimit;
     uint32 messageSize;
@@ -45,7 +49,7 @@ enum TYPE {
     VERIFY_FIELDS
 }
 
-/// @notice Type of automatic modes. Used in read config.
+/// @notice Type of automatic modes. Helps decide ModeConfig.
 enum MODE {
     CONSERVATIVE,
     DEFAULT,
