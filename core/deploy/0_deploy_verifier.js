@@ -25,4 +25,4 @@ module.exports = async ({ getNamedAccounts, deployments }) => {
     messageContract.address
   );
 };
-module.exports.tags = ["MyContract"];
+module.exports.tags = ["Verifiers"];

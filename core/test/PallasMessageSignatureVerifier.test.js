@@ -29,9 +29,8 @@ describe("PallasMessageSignatureVerifier", function () {
         publicKey: "B62qj2vSpa1MEXNPZAkLdEzQdRS9iE8NhhRfpqLCAvW6QCPi8fxAYnM",
       };
 
-      /// 500 Chars.
       const message =
-        "bDmpUjsjyweJ34mNnMZX9ChTJ2WPiOmGbPq2JoMb4uCgbycxkcokERLwtjeHaOMXuEpxeaOPxDRFJJ0WCQKuqLo1OJkoqbpEjWkraP5X31auEKVESSIFu2JbxwL86socv4DOtx3vgHz9I6DShg22KOhOHQBntWLxiMLLeRBIhBcEEvuzy6kEhhXaOVfN7TNvVUgupXZqeeoysxlrQ8zsn0KJ1sOcDQnUNYiZ2bsJgAVFj3s4mp2O0R1232";
+        "OHQBntWLxiMLLeRBIhBcEEvuzy6kEhhXaOVfN7TNvVUgupXZqeeoysxlrQ8zsn0KJ1sOcDQnUNYiZ2bsJgAVFaj3s4mp2O0R1232";
 
       console.log("ORIGINAL DATA LENGTH :", message.length);
 

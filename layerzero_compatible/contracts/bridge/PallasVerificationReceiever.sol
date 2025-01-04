@@ -32,6 +32,26 @@ struct QuoteResult {
     uint256 lzTokenFee;
 }
 
+struct ModeConfig {
+    uint128 gasLimit;
+    uint32 messageSize;
+    uint32 fieldsSize;
+}
+
+/// @notice To decide the type incoming read bytes.
+enum TYPE {
+    VERIFY_PLACEHOLDER_DO_NOT_USE,
+    VERIFY_MESSAGE,
+    VERIFY_FIELDS
+}
+
+/// @notice Type of automatic modes. Used in read config.
+enum MODE {
+    CONSERVATIVE,
+    DEFAULT,
+    OPTIMISTIC
+}
+
 /// @notice Error thrown when the provided fee is insufficient
 /// @param required The required fee amount
 /// @param provided The provided fee amount
@@ -42,40 +62,41 @@ error InsufficientFee(uint256 required, uint256 provided);
 /// @dev Inherits from OAppRead for cross-chain messaging and Ownable for access control
 contract PallasVerificationReceiever is OAppRead {
     /// @notice Address of the contract for field verification
-    address verifyFieldsContract = address(0);
+    address VERIFY_FIELDS_CONTRACT = address(0);
     /// @notice Address of the contract for message verification
-    address verifyMessageContract = address(0);
+    address VERIFY_MESSAGE_CONTRACT = address(0);
 
     /// @notice Signature prefix for mainnet network mode
     string constant MAINNET_PREFIX = "MinaSignatureMainnet";
     /// @notice Signature prefix for testnet network mode
     string constant TESTNET_PREFIX = "CodaSignature*******";
 
-    uint8 constant TYPE_VERIFY_MESSAGE = 1;
-    uint8 constant TYPE_VERIFY_FIELDS = 2;
-
     /// @notice Setting for no computation (Ie no lzMap/lzReduce)
     uint8 constant SETTING_NONE = 3;
 
     uint32 constant READ_CHANNEL_EID_THRESHOLD = 4294965694;
-    uint32 constant READ_CHANNEL_ID = 4294967295;
+    uint32 READ_CHANNEL_ID = 4294967295;
+    uint32 READ_FROM_ENDPOINT_ID = 30110;
+    uint32 READ_TO_ENDPOINT_ID = 30101;
 
-    uint32 constant ARB_ENDPOINT_ID = 30110;
-    uint32 constant ETH_ENDPOINT_ID = 30101;
+    uint16 BLOCK_CONFIRMATIONS = 3;
+
+    /// @notice Conservative gas limit for transactions (100 Chars/20 Fields)
+    /// @dev Decoding gas - 30k/38k
+    ModeConfig CONSERVATIVE_CONFIG = ModeConfig({ gasLimit: 120_000, messageSize: 800, fieldsSize: 2000 });
 
     /// @notice Default gas limit for transactions (250 Chars/50 Fields)
     /// @dev Decoding gas - 32k/55k
-    uint128 constant DEFAULT_GAS_LIMIT = 150_000;
-    uint32 constant DEFAULT_MESSAGE_SIZE = 1100;
-    uint32 constant DEFAULT_FIELDS_SIZE = 3800;
+    ModeConfig DEFAULT_CONFIG = ModeConfig({ gasLimit: 150_000, messageSize: 1100, fieldsSize: 3800 });
+
     /// @notice Optimistic gas limit for transactions (500 Chars/100 Fields)
     /// @dev Decoding gas - 37k/82k
-    uint128 constant OPTIMISTIC_GAS_LIMIT = 200_000;
-    uint32 constant OPTIMISTIC_MESSAGE_SIZE = 1600;
-    uint32 constant OPTIMISTIC_FIELDS_SIZE = 7000;
+    ModeConfig OPTIMISTIC_CONFIG = ModeConfig({ gasLimit: 200_000, messageSize: 1600, fieldsSize: 7000 });
 
-    ChainConfig CHAIN_CONFIG_VF = ChainConfig({ confirmations: 3, toReadFrom: verifyFieldsContract });
-    ChainConfig CHAIN_CONFIG_VM = ChainConfig({ confirmations: 3, toReadFrom: verifyMessageContract });
+    ChainConfig CHAIN_CONFIG_VF =
+        ChainConfig({ confirmations: BLOCK_CONFIRMATIONS, toReadFrom: VERIFY_FIELDS_CONTRACT });
+    ChainConfig CHAIN_CONFIG_VM =
+        ChainConfig({ confirmations: BLOCK_CONFIRMATIONS, toReadFrom: VERIFY_MESSAGE_CONTRACT });
 
     /// @notice Mapping of verification field IDs to their compressed data
     mapping(uint256 => VerifyFieldsStateCompressed) vfIdToData;
@@ -101,16 +122,18 @@ contract PallasVerificationReceiever is OAppRead {
     /// @param payInLzToken Whether to pay in LayerZero tokens
     /// @return QuoteResult Result containing gas and fee information
     function quote(
-        uint8 verifyType,
+        TYPE verifyType,
         uint256 id,
         uint32 calldataSize,
         uint128 gasLimit,
         bool payInLzToken
     ) public view returns (QuoteResult memory) {
+        if (verifyType == TYPE.VERIFY_PLACEHOLDER_DO_NOT_USE) revert();
+
         bytes memory _options = OptionsBuilder.newOptions();
         _options = OptionsBuilder.addExecutorLzReadOption(_options, gasLimit, calldataSize, 0);
         bytes memory _cmd = getCmd(verifyType, id);
-        MessagingFee memory fee = _quote(ARB_ENDPOINT_ID, _cmd, _options, payInLzToken);
+        MessagingFee memory fee = _quote(READ_FROM_ENDPOINT_ID, _cmd, _options, payInLzToken);
 
         return
             QuoteResult({
@@ -124,30 +147,39 @@ contract PallasVerificationReceiever is OAppRead {
     /// @notice Gets automatic quote for transaction
     /// @param verifyType Type of verification
     /// @param id Verification ID
-    /// @param optimisticMode Whether to use optimistic mode
+    /// @param mode Whether to use optimistic mode
     /// @param payInLzToken Whether to pay in LayerZero tokens
     /// @return QuoteResult Result containing gas and fee information
     function autoQuote(
-        uint8 verifyType,
+        TYPE verifyType,
         uint256 id,
-        bool optimisticMode,
+        MODE mode,
         bool payInLzToken
     ) public view returns (QuoteResult memory) {
+        if (verifyType == TYPE.VERIFY_PLACEHOLDER_DO_NOT_USE) revert();
+
         uint128 gasLimit;
         uint32 calldataSize;
 
-        if (!optimisticMode) {
-            gasLimit = DEFAULT_GAS_LIMIT;
-            calldataSize = verifyType == TYPE_VERIFY_MESSAGE ? DEFAULT_MESSAGE_SIZE : DEFAULT_FIELDS_SIZE;
+        if (mode == MODE.CONSERVATIVE) {
+            gasLimit = CONSERVATIVE_CONFIG.gasLimit;
+            calldataSize = verifyType == TYPE.VERIFY_MESSAGE
+                ? CONSERVATIVE_CONFIG.messageSize
+                : CONSERVATIVE_CONFIG.fieldsSize;
+        } else if (mode == MODE.DEFAULT) {
+            gasLimit = DEFAULT_CONFIG.gasLimit;
+            calldataSize = verifyType == TYPE.VERIFY_MESSAGE ? DEFAULT_CONFIG.messageSize : DEFAULT_CONFIG.fieldsSize;
         } else {
-            gasLimit = OPTIMISTIC_GAS_LIMIT;
-            calldataSize = verifyType == TYPE_VERIFY_MESSAGE ? OPTIMISTIC_MESSAGE_SIZE : OPTIMISTIC_FIELDS_SIZE;
+            gasLimit = OPTIMISTIC_CONFIG.gasLimit;
+            calldataSize = verifyType == TYPE.VERIFY_MESSAGE
+                ? OPTIMISTIC_CONFIG.messageSize
+                : OPTIMISTIC_CONFIG.fieldsSize;
         }
 
         bytes memory _options = OptionsBuilder.newOptions();
         _options = OptionsBuilder.addExecutorLzReadOption(_options, gasLimit, calldataSize, 0);
         bytes memory _cmd = getCmd(verifyType, id);
-        MessagingFee memory fee = _quote(ARB_ENDPOINT_ID, _cmd, _options, payInLzToken);
+        MessagingFee memory fee = _quote(READ_FROM_ENDPOINT_ID, _cmd, _options, payInLzToken);
 
         return
             QuoteResult({
@@ -162,28 +194,26 @@ contract PallasVerificationReceiever is OAppRead {
     /// @param verifyType Type of verification
     /// @param id Verification ID
     /// @return bytes The command bytes
-    function getCmd(uint8 verifyType, uint256 id) public view returns (bytes memory) {
+    function getCmd(TYPE verifyType, uint256 id) public view returns (bytes memory) {
         bytes memory callData;
-        if (verifyType == TYPE_VERIFY_MESSAGE)
-            callData = abi.encodeWithSelector(ICORE_MessageVerification.getVMStateBytesCompressed.selector, id);
-        else if (verifyType == TYPE_VERIFY_FIELDS)
-            callData = abi.encodeWithSelector(ICORE_FieldsVerification.getVFStateBytesCompressed.selector, id);
-
         EVMCallRequestV1[] memory readRequests = new EVMCallRequestV1[](1);
-        if (verifyType == TYPE_VERIFY_FIELDS) {
+
+        if (verifyType == TYPE.VERIFY_MESSAGE) {
+            callData = abi.encodeWithSelector(ICORE_MessageVerification.getVMStateBytesCompressed.selector, id);
             readRequests[0] = EVMCallRequestV1({
                 appRequestLabel: uint16(1),
-                targetEid: ARB_ENDPOINT_ID,
+                targetEid: READ_FROM_ENDPOINT_ID,
                 isBlockNum: false,
                 blockNumOrTimestamp: uint64(block.timestamp),
                 confirmations: CHAIN_CONFIG_VF.confirmations,
                 to: CHAIN_CONFIG_VF.toReadFrom,
                 callData: callData
             });
-        } else {
+        } else if (verifyType == TYPE.VERIFY_FIELDS) {
+            callData = abi.encodeWithSelector(ICORE_FieldsVerification.getVFStateBytesCompressed.selector, id);
             readRequests[0] = EVMCallRequestV1({
                 appRequestLabel: uint16(1),
-                targetEid: ARB_ENDPOINT_ID,
+                targetEid: READ_FROM_ENDPOINT_ID,
                 isBlockNum: false,
                 blockNumOrTimestamp: uint64(block.timestamp),
                 confirmations: CHAIN_CONFIG_VM.confirmations,
@@ -194,10 +224,10 @@ contract PallasVerificationReceiever is OAppRead {
 
         EVMCallComputeV1 memory computeSettings = EVMCallComputeV1({
             computeSetting: SETTING_NONE,
-            targetEid: ETH_ENDPOINT_ID,
+            targetEid: READ_TO_ENDPOINT_ID,
             isBlockNum: false,
             blockNumOrTimestamp: uint64(block.timestamp),
-            confirmations: 3,
+            confirmations: BLOCK_CONFIRMATIONS,
             to: address(this)
         });
 
@@ -212,12 +242,14 @@ contract PallasVerificationReceiever is OAppRead {
     /// @param payInLzToken Whether to pay in LayerZero tokens
     /// @return MessagingReceipt Receipt of the message transaction
     function readBytesCompressedManual(
-        uint8 verifyType,
+        TYPE verifyType,
         uint256 id,
         uint32 calldataSize,
         uint128 gasLimit,
         bool payInLzToken
     ) external payable returns (MessagingReceipt memory) {
+        if (verifyType == TYPE.VERIFY_PLACEHOLDER_DO_NOT_USE) revert();
+
         QuoteResult memory result = quote(verifyType, id, calldataSize, gasLimit, payInLzToken);
 
         if (msg.value < result.nativeFee) {
@@ -234,16 +266,18 @@ contract PallasVerificationReceiever is OAppRead {
     /// @notice Reads compressed bytes with automatic parameters
     /// @param verifyType Type of verification
     /// @param id Verification ID
-    /// @param optimisticMode Whether to use optimistic mode
+    /// @param mode Whether to use conservative/default/optimistic mode
     /// @param payInLzToken Whether to pay in LayerZero tokens
     /// @return MessagingReceipt Receipt of the message transaction
     function readBytesCompressedAuto(
-        uint8 verifyType,
+        TYPE verifyType,
         uint256 id,
-        bool optimisticMode,
+        MODE mode,
         bool payInLzToken
     ) external payable returns (MessagingReceipt memory) {
-        QuoteResult memory result = autoQuote(verifyType, id, optimisticMode, payInLzToken);
+        if (verifyType == TYPE.VERIFY_PLACEHOLDER_DO_NOT_USE) revert();
+
+        QuoteResult memory result = autoQuote(verifyType, id, mode, payInLzToken);
 
         if (msg.value < result.nativeFee) {
             revert InsufficientFee(result.nativeFee, msg.value);
@@ -284,20 +318,22 @@ contract PallasVerificationReceiever is OAppRead {
     /// @dev _executor The executor address (unused in this implementation).
     /// @dev _extraData Additional data (unused in this implementation).
     function _readLzReceive(
-        Origin calldata /* _origin */,
+        Origin calldata _origin,
         bytes32 /* _guid */,
         bytes calldata _message,
         address /* _executor */,
         bytes calldata /* _extraData */
     ) internal virtual {
-        uint8 verifyType = uint8(_message[0]);
+        TYPE verifyType = TYPE(uint8(_message[0]));
 
-        if (verifyType == TYPE_VERIFY_FIELDS) {
+        if (verifyType == TYPE.VERIFY_FIELDS) {
             (uint256 id, VerifyFieldsStateCompressed memory state) = unpackVerifyFieldsState(_message);
             vfIdToData[id] = state;
-        } else {
+        } else if (verifyType == TYPE.VERIFY_MESSAGE) {
             (uint256 id, VerifyMessageStateCompressed memory state) = unpackVerifyMessageState(_message);
             vmIdToData[id] = state;
+        } else {
+            emit ArbitraryMessageReceived(_origin, _message);
         }
     }
 
@@ -372,5 +408,66 @@ contract PallasVerificationReceiever is OAppRead {
         state.prefix = state.mainnet ? "MinaSignatureMainnet" : "CodaSignature*******";
         state.message = abi.decode(data[195:], (string));
         return (state.vmId, state);
+    }
+
+    /// ===========================================================================
+    /// ADMIN STORAGE UPDATE FUNCTIONS ============================================
+    /// ===========================================================================
+
+    function updateVerifyFieldsContract(address addr) external onlyOwner {
+        require(addr != address(0));
+        VERIFY_FIELDS_CONTRACT = addr;
+    }
+
+    function updateVerifyMessageContract(address addr) external onlyOwner {
+        require(addr != address(0));
+        VERIFY_MESSAGE_CONTRACT = addr;
+    }
+
+    function updateBlockConfirmations(uint16 confirmations) external onlyOwner {
+        require(confirmations != 0);
+        BLOCK_CONFIRMATIONS = confirmations;
+    }
+
+    function updateReadChannelId(uint32 id) external onlyOwner {
+        READ_CHANNEL_ID = id;
+    }
+
+    function updateReadFromEndpointId(uint32 id) external onlyOwner {
+        READ_FROM_ENDPOINT_ID = id;
+    }
+
+    function updateReadToEndpointId(uint32 id) external onlyOwner {
+        READ_TO_ENDPOINT_ID = id;
+    }
+
+    function updateConservativeModeParams(
+        uint128 gasLimit,
+        uint32 messageSizeBytes,
+        uint32 fieldsSizeBytes
+    ) external onlyOwner {
+        CONSERVATIVE_CONFIG.gasLimit = gasLimit;
+        CONSERVATIVE_CONFIG.messageSize = messageSizeBytes;
+        CONSERVATIVE_CONFIG.fieldsSize = fieldsSizeBytes;
+    }
+
+    function updateDefaultModeParams(
+        uint128 gasLimit,
+        uint32 messageSizeBytes,
+        uint32 fieldsSizeBytes
+    ) external onlyOwner {
+        DEFAULT_CONFIG.gasLimit = gasLimit;
+        DEFAULT_CONFIG.messageSize = messageSizeBytes;
+        DEFAULT_CONFIG.fieldsSize = fieldsSizeBytes;
+    }
+
+    function updateOptimisticModeParams(
+        uint128 gasLimit,
+        uint32 messageSizeBytes,
+        uint32 fieldsSizeBytes
+    ) external onlyOwner {
+        OPTIMISTIC_CONFIG.gasLimit = gasLimit;
+        OPTIMISTIC_CONFIG.messageSize = messageSizeBytes;
+        OPTIMISTIC_CONFIG.fieldsSize = fieldsSizeBytes;
     }
 }
