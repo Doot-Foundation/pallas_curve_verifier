@@ -19,6 +19,7 @@ struct ChainConfig {
     uint16 confirmations;
     address toReadFrom;
 }
+
 /// @notice Structure to hold quote calculation results
 /// @param gasLimit Gas limit for the transaction
 /// @param calldataSize Size of the calldata
@@ -30,6 +31,7 @@ struct QuoteResult {
     uint256 nativeFee;
     uint256 lzTokenFee;
 }
+
 /// @notice Error thrown when the provided fee is insufficient
 /// @param required The required fee amount
 /// @param provided The provided fee amount

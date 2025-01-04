@@ -32,16 +32,16 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy {
     mapping(uint256 => bytes) public vmLifeCycleBytesCompressed;
 
     /// @notice Ensures only the creator of a verification process can access it
-    /// @param id The verification process ID
-    modifier isVMCreator(uint256 id) {
-        if (msg.sender != vmLifeCycleCreator[id]) revert();
+    /// @param vmId The verification process ID
+    modifier isVMCreator(uint256 vmId) {
+        if (msg.sender != vmLifeCycleCreator[vmId]) revert();
         _;
     }
 
     /// @notice Ensures the verification ID exists
-    /// @param id The verification process ID to check
-    modifier isValidVMId(uint256 id) {
-        if (id >= vmCounter) revert();
+    /// @param vmId The verification process ID to check
+    modifier isValidVMId(uint256 vmId) {
+        if (vmId >= vmCounter) revert();
         _;
     }
 
@@ -135,30 +135,30 @@ contract PallasMessageSignatureVerifier is PoseidonLegacy {
     /// @notice Zero step - Input assignment for message verification
     /// ==================================================
     /// Initializes the verification state for a message signature
-    /// @param _publicKey The public key point (x,y)
-    /// @param _signature Contains r (x-coordinate) and s (scalar)
-    /// @param _message The string message to verify
-    /// @param _network Network identifier (true for mainnet, false for testnet)
+    /// @param publicKey The public key point (x,y)
+    /// @param signature Contains r (x-coordinate) and s (scalar)
+    /// @param message The string message to verify
+    /// @param network Network identifier (true for mainnet, false for testnet)
     function step_0_VM_assignValues(
-        Point calldata _publicKey,
-        Signature calldata _signature,
-        string calldata _message,
-        bool _network
+        Point calldata publicKey,
+        Signature calldata signature,
+        string calldata message,
+        bool network
     ) external returns (uint256) {
-        if (!isValidPublicKey(_publicKey)) revert InvalidPublicKey();
+        if (!isValidPublicKey(publicKey)) revert InvalidPublicKey();
 
         uint256 toSetId = vmCounter;
         ++vmCounter;
 
         VerifyMessageState storage toPush = vmLifeCycle[toSetId];
         toPush.atStep = 0;
-        toPush.publicKey = _publicKey;
-        toPush.signature = _signature;
-        toPush.message = _message;
-        toPush.mainnet = _network;
+        toPush.publicKey = publicKey;
+        toPush.signature = signature;
+        toPush.message = message;
+        toPush.mainnet = network;
         toPush.init = true;
 
-        toPush.prefix = _network ? "MinaSignatureMainnet" : "CodaSignature*******";
+        toPush.prefix = network ? "MinaSignatureMainnet" : "CodaSignature*******";
 
         vmLifeCycleCreator[toSetId] = msg.sender;
 

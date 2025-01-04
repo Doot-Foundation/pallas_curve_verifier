@@ -3,7 +3,6 @@ pragma solidity ^0.8.20;
 
 import "./PallasConstants.sol";
 import "./PallasCurve.sol";
-import "hardhat/console.sol";
 
 /**
  * @title PoseidonT3

@@ -1,5 +1,7 @@
 require("@nomicfoundation/hardhat-toolbox");
 require("hardhat-deploy");
+require("@nomicfoundation/hardhat-verify");
+require("dotenv").config();
 // require("hardhat-gas-reporter");
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
@@ -19,26 +21,43 @@ module.exports = {
       viaIR: true,
     },
   },
-  networks: {
-    hardhat: {
-      // allowUnlimitedContractSize: true,
-      // blockGasLimit: 100000000000, // Practically unlimited
-    },
-    l1: {
-      url: "http://127.0.0.1:8545",
-      chainId: 31337,
-    },
-    l2: {
-      url: "http://127.0.0.1:8546",
-      chainId: 31338,
-    },
-  },
-  mocha: {
-    timeout: 100000,
-  },
   namedAccounts: {
     deployer: {
       default: 0,
     },
+  },
+  networks: {
+    hardhat: {},
+    arbitrum_sepolia: {
+      chainId: 421614,
+      url: "https://sepolia-rollup.arbitrum.io/rpc",
+      accounts: [process.env.PRIVATE_KEY],
+      verify: {
+        etherscan: {
+          apiKey: process.env.ARBISCAN_API_KEY,
+        },
+      },
+    },
+  },
+  etherscan: {
+    apiKey: {
+      arbitrum_sepolia: process.env.ARBISCAN_API_KEY,
+    },
+    customChains: [
+      {
+        network: "arbitrum_sepolia",
+        chainId: 421614,
+        urls: {
+          apiURL: "https://api-sepolia.arbiscan.io/api",
+          browserURL: "https://sepolia.arbiscan.io",
+        },
+      },
+    ],
+  },
+  mocha: {
+    timeout: 100000,
+  },
+  sourcify: {
+    enabled: true,
   },
 };
