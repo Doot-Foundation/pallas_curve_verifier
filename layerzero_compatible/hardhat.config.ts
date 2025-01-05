@@ -4,15 +4,16 @@
 // - Duplicate .env.example file and name it .env
 // - Fill in the environment variables
 import 'dotenv/config'
-
+import '@nomicfoundation/hardhat-verify'
 import 'hardhat-deploy'
 import 'hardhat-contract-sizer'
 import '@nomiclabs/hardhat-ethers'
 import '@layerzerolabs/toolbox-hardhat'
 import { HardhatUserConfig, HttpNetworkAccountsUserConfig } from 'hardhat/types'
 
-import { EndpointId } from '@layerzerolabs/lz-definitions'
-
+const ARBITRUM_SEPOLIA_RPC = process.env.ARB_SEPOLIA_RPC
+const ARBIITRUM_RPC = process.env.ARB_RPC
+const ARBISCAN_API_KEY = process.env.ARBISCAN_API_KEY
 // Set your preferred authentication method
 //
 // If you prefer using a mnemonic, set a MNEMONIC environment variable
@@ -59,30 +60,61 @@ const config: HardhatUserConfig = {
         ],
     },
     networks: {
-        'sepolia-testnet': {
-            eid: EndpointId.SEPOLIA_V2_TESTNET,
-            url: process.env.RPC_URL_SEPOLIA || 'https://rpc.sepolia.org/',
-            accounts,
+        arbitrum_sepolia: {
+            chainId: 421614,
+            url: ARBITRUM_SEPOLIA_RPC ? ARBITRUM_SEPOLIA_RPC : 'https://sepolia-rollup.arbitrum.io/rpc',
+            accounts: [PRIVATE_KEY ? PRIVATE_KEY : ''],
+            verify: {
+                etherscan: {
+                    apiKey: ARBISCAN_API_KEY,
+                },
+            },
         },
-        'avalanche-testnet': {
-            eid: EndpointId.AVALANCHE_V2_TESTNET,
-            url: process.env.RPC_URL_FUJI || 'https://rpc.ankr.com/avalanche_fuji',
-            accounts,
-        },
-        'amoy-testnet': {
-            eid: EndpointId.AMOY_V2_TESTNET,
-            url: process.env.RPC_URL_AMOY || 'https://polygon-amoy-bor-rpc.publicnode.com',
-            accounts,
+        arbitrum: {
+            chainId: 42161,
+            url: ARBIITRUM_RPC ? ARBIITRUM_RPC : 'https://arb1.arbitrum.io/rpc',
+            accounts: [PRIVATE_KEY ? PRIVATE_KEY : ''],
+            verify: {
+                etherscan: {
+                    apiKey: ARBISCAN_API_KEY,
+                },
+            },
         },
         hardhat: {
-            // Need this for testing because TestHelperOz5.sol is exceeding the compiled contract size limit
             allowUnlimitedContractSize: true,
         },
+    },
+    etherscan: {
+        apiKey: {
+            arbitrum_sepolia: ARBISCAN_API_KEY ? ARBISCAN_API_KEY : '',
+            arbitrum: ARBISCAN_API_KEY ? ARBISCAN_API_KEY : '',
+        },
+        customChains: [
+            {
+                network: 'arbitrum_sepolia',
+                chainId: 421614,
+                urls: {
+                    apiURL: 'https://api-sepolia.arbiscan.io/api',
+                    browserURL: 'https://sepolia.arbiscan.io',
+                },
+            },
+            {
+                network: 'arbitrum',
+                chainId: 42161,
+                urls: {
+                    apiURL: 'https://api.arbiscan.io/api',
+                    browserURL: 'https://arbiscan.io/',
+                },
+            },
+        ],
     },
     namedAccounts: {
         deployer: {
             default: 0, // wallet address of index[0], of the mnemonic in .env
         },
+    },
+    sourcify: {
+        enabled: true,
     },
 }
 
