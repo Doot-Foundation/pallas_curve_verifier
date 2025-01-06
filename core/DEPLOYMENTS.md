@@ -36,7 +36,7 @@ PallasFieldsSignatureVerifier deployed to : https://sepolia.arbiscan.io/address/
 
 PallasMessageSignatureVerifier deployed to: https://sepolia.arbiscan.io/address/0x5790918c7db60C9c57dc1031FAf5f672EB22b4fC
 
-PallasVerificationReceiever deployed to: https://sepolia.arbiscan.io/address/0x2F4469330760e477ffFfa7cF3E42D04efF3BD054
+PallasVerificationReceiever deployed to: https://sepolia.arbiscan.io/address/0x68123E0627eA88cD114e92469303e1ABD4E35E9D
 
 ## ARBITRUM
 
