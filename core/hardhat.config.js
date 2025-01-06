@@ -30,7 +30,9 @@ module.exports = {
     hardhat: {},
     arbitrum_sepolia: {
       chainId: 421614,
-      url: "https://sepolia-rollup.arbitrum.io/rpc",
+      url: process.env.ARBITRUM_SEPOLIA_RPC
+        ? process.env.ARBITRUM_SEPOLIA_RPC
+        : "https://sepolia-rollup.arbitrum.io/rpc",
       accounts: [process.env.PRIVATE_KEY],
       verify: {
         etherscan: {
@@ -40,7 +42,9 @@ module.exports = {
     },
     arbitrum: {
       chainId: 42161,
-      url: "https://arb1.arbitrum.io/rpc",
+      url: process.env.ARBITRUM_RPC
+        ? process.env.ARBITRUM_RPC
+        : "https://arb1.arbitrum.io/rpc",
       accounts: [process.env.PRIVATE_KEY],
       verify: {
         etherscan: {

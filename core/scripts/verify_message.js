@@ -12,17 +12,15 @@ async function main() {
   );
 
   const verifier = Verifier.attach(
-    "0xB352B0dE8AF1e27a0fc927c1aD38BdB1bc4FCf40"
+    "0x5790918c7db60C9c57dc1031FAf5f672EB22b4fC"
   );
 
   const vmId = await verifier.vmCounter();
   console.log("Current ID :", vmId);
 
-  let vmState = await verifier.getVMState(vmId);
-  console.log("Read result before step_0 :", vmState);
-
   const message =
-    "Hello! THIS IS THE VERY FIRST TXN AND I AM VERY EXCITED. LETS FUCKING GOOOOO!";
+    "OHQBntWLxiMLLeRBIhBcEEvuzy6kEhhXaOVfN7TNvVUgupXZqeeoysxlrQ8zsn0KJ1sOcDQnUNYiZ2bsJgAVFaj3s4mp2O0R1232";
+  console.log(message.length);
   const signedMessage = client.signMessage(message, keypair.privateKey);
   const s = BigInt(signedMessage.signature.scalar);
   const r = BigInt(signedMessage.signature.field);
@@ -48,23 +46,29 @@ async function main() {
 
   txn = await verifier.step_1_VM(vmId);
   await txn.wait();
+  console.log("step_1 confirmed!");
 
   txn = await verifier.step_2_VM(vmId);
   await txn.wait();
+  console.log("step_2 confirmed!");
 
   txn = await verifier.step_3_VM(vmId);
   await txn.wait();
+  console.log("step_3 confirmed!");
 
   txn = await verifier.step_4_VM(vmId);
   await txn.wait();
+  console.log("step_4 confirmed!");
 
   txn = await verifier.step_5_VM(vmId);
   await txn.wait();
+  console.log("step_5 confirmed!");
 
   txn = await verifier.step_6_VM(vmId);
   await txn.wait();
+  console.log("step_6 confirmed!");
 
-  vmState = await verifier.getVMState(0);
+  let vmState = await verifier.getVMState(vmId);
   console.log("Mina-Signer Verdict :", result);
   console.log("Smart Contract Verdict :", vmState[2]);
 }

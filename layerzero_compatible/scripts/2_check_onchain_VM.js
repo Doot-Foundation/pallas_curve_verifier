@@ -2,12 +2,10 @@ const { ethers } = require('hardhat');
 
 async function main() {
     const Receiver = await ethers.getContractFactory('PallasVerificationReceiever');
-    const receiver = Receiver.attach('0xD15444a7ff0564AD8b283a94e8033F1ce31cd2E9');
+    const receiver = Receiver.attach('0x68123E0627eA88cD114e92469303e1ABD4E35E9D');
 
-    let vf_config = await receiver.CHAIN_CONFIG_VF();
-    console.log(vf_config);
-    let vm_config = await receiver.CHAIN_CONFIG_VM();
-    console.log(vm_config);
+    const valueM = await receiver.getVMIdToData(9);
+    console.log(valueM);
 }
 
 main()
@@ -16,3 +14,5 @@ main()
         console.error(error);
         process.exit(1);
     });
+
+module.exports.tags = ['Receiver'];

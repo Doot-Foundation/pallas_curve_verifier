@@ -2,7 +2,7 @@ const { ethers } = require('hardhat');
 
 async function main() {
     const Receiver = await ethers.getContractFactory('PallasVerificationReceiever');
-    const receiver = Receiver.attach('0xD15444a7ff0564AD8b283a94e8033F1ce31cd2E9');
+    const receiver = Receiver.attach('0x68123E0627eA88cD114e92469303e1ABD4E35E9D');
 
     let txn;
 
@@ -21,6 +21,7 @@ async function main() {
     await txn.wait(1);
 
     txn = await receiver.setReadChannel(4294967295, true);
+    console.log(txn.hash);
     await txn.wait(1);
 
     console.log('All success!');

@@ -4,11 +4,12 @@ pragma solidity ^0.8.0;
 import "../interfaces/ICORE_FieldsVerification.sol";
 import "../interfaces/ICORE_MessageVerification.sol";
 
-import { ReadCmdCodecV1, EVMCallComputeV1, EVMCallRequestV1 } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/ReadCmdCodecV1.sol";
-import { OAppRead } from "@layerzerolabs/oapp-evm/contracts/oapp/OAppRead.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { OAppRead } from "@layerzerolabs/oapp-evm/contracts/oapp/OAppRead.sol";
 import { OptionsBuilder } from "@layerzerolabs/oapp-evm/contracts/oapp/libs/OptionsBuilder.sol";
 import { MessagingFee, MessagingReceipt, Origin } from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
+import { ReadCmdCodecV1, EVMCallComputeV1, EVMCallRequestV1 } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/ReadCmdCodecV1.sol";
 
 /// @title ChainConfig
 /// @notice Configuration structure for chain-specific settings
@@ -74,7 +75,7 @@ contract PallasVerificationReceiever is OAppRead {
     uint8 constant SETTING_NONE = 3;
 
     uint32 public constant READ_CHANNEL_EID_THRESHOLD = 4294965694;
-    uint32[2] public READ_CHANNEL_IDS = [4294967295, 4294967294];
+    uint32 public READ_CHANNEL_ID = 4294967295;
 
     /// @dev Target chain - Reading from.
     uint32 public READ_FROM_ENDPOINT_ID = 30110; // ARB
@@ -84,19 +85,20 @@ contract PallasVerificationReceiever is OAppRead {
     uint32 public READ_TO_ENDPOINT_ID = 30101; // ETH
     address public READ_TO_ENDPOINT_ADDRESS = 0x1a44076050125825900e736c501f859c50fE728c;
 
+    /// @dev Read block confirmations required
     uint16 public BLOCK_CONFIRMATIONS = 3;
 
     /// @notice Conservative gas limit for transactions (100 Chars/20 Fields)
-    /// @dev Decoding gas - 30k/38k
-    ModeConfig public CONSERVATIVE_CONFIG = ModeConfig({ gasLimit: 120_000, messageSize: 800, fieldsSize: 2000 });
+    /// @dev Decoding gas - 714k(Fields)
+    ModeConfig public CONSERVATIVE_CONFIG = ModeConfig({ gasLimit: 750000, messageSize: 800, fieldsSize: 2000 });
 
     /// @notice Default gas limit for transactions (250 Chars/50 Fields)
-    /// @dev Decoding gas - 32k/55k
-    ModeConfig public DEFAULT_CONFIG = ModeConfig({ gasLimit: 150_000, messageSize: 1100, fieldsSize: 3800 });
+    /// @dev Decoding gas - 1.4m(Fields)
+    ModeConfig public DEFAULT_CONFIG = ModeConfig({ gasLimit: 1500000, messageSize: 1100, fieldsSize: 3800 });
 
     /// @notice Optimistic gas limit for transactions (500 Chars/100 Fields)
-    /// @dev Decoding gas - 37k/82k
-    ModeConfig public OPTIMISTIC_CONFIG = ModeConfig({ gasLimit: 200_000, messageSize: 1600, fieldsSize: 7000 });
+    /// @dev Decoding gas - 2.5m(Fields)
+    ModeConfig public OPTIMISTIC_CONFIG = ModeConfig({ gasLimit: 2600000, messageSize: 1600, fieldsSize: 7000 });
 
     /// @notice Read configuration for vf and vm
     ChainConfig public CHAIN_CONFIG_VF = ChainConfig({ confirmations: 1, toReadFrom: address(0) });
@@ -112,6 +114,9 @@ contract PallasVerificationReceiever is OAppRead {
     /// @param origin Origin information of the message
     /// @param message The received message data
     event ArbitraryMessageReceived(Origin origin, bytes message);
+
+    /// @notice Emitted when a valid read is received.
+    event ReadReceived(Origin origin, bytes message);
 
     /// @notice Constructor for PallasVerificationReceiever
     /// @param _endpoint Address of the LayerZero endpoint
@@ -155,7 +160,7 @@ contract PallasVerificationReceiever is OAppRead {
         bytes memory _options = OptionsBuilder.newOptions();
         _options = OptionsBuilder.addExecutorLzReadOption(_options, gasLimit, calldataSize, 0);
         bytes memory _cmd = _getCmd(verifyType, id);
-        MessagingFee memory fee = _quote(READ_CHANNEL_IDS[0], _cmd, _options, payInLzToken);
+        MessagingFee memory fee = _quote(READ_CHANNEL_ID, _cmd, _options, payInLzToken);
 
         return (
             QuoteResult({
@@ -204,7 +209,7 @@ contract PallasVerificationReceiever is OAppRead {
         bytes memory _cmd = _getCmd(verifyType, id);
         bytes memory _options = OptionsBuilder.newOptions();
         _options = OptionsBuilder.addExecutorLzReadOption(_options, gasLimit, calldataSize, 0);
-        MessagingFee memory fee = _quote(READ_CHANNEL_IDS[0], _cmd, _options, payInLzToken);
+        MessagingFee memory fee = _quote(READ_CHANNEL_ID, _cmd, _options, payInLzToken);
 
         return (
             QuoteResult({
@@ -246,7 +251,7 @@ contract PallasVerificationReceiever is OAppRead {
             revert InsufficientFee(result.nativeFee, msg.value);
         }
 
-        return _lzSend(READ_CHANNEL_IDS[0], cmd, options, MessagingFee(msg.value, 0), payable(msg.sender));
+        return _lzSend(READ_CHANNEL_ID, cmd, options, MessagingFee(msg.value, 0), payable(msg.sender));
     }
 
     /// @notice Reads compressed bytes with automatic parameters
@@ -274,7 +279,7 @@ contract PallasVerificationReceiever is OAppRead {
             revert InsufficientFee(result.nativeFee, msg.value);
         }
 
-        return _lzSend(READ_CHANNEL_IDS[0], cmd, options, MessagingFee(msg.value, 0), payable(msg.sender));
+        return _lzSend(READ_CHANNEL_ID, cmd, options, MessagingFee(msg.value, 0), payable(msg.sender));
     }
 
     /// @notice Gets command bytes for verification
@@ -290,8 +295,8 @@ contract PallasVerificationReceiever is OAppRead {
                 targetEid: READ_FROM_ENDPOINT_ID,
                 isBlockNum: false,
                 blockNumOrTimestamp: uint64(block.timestamp),
-                confirmations: CHAIN_CONFIG_VF.confirmations,
-                to: CHAIN_CONFIG_VF.toReadFrom,
+                confirmations: CHAIN_CONFIG_VM.confirmations,
+                to: CHAIN_CONFIG_VM.toReadFrom,
                 callData: abi.encodeWithSelector(ICORE_MessageVerification.getVMStateBytesCompressed.selector, id)
             });
         } else if (verifyType == TYPE.VERIFY_FIELDS) {
@@ -300,8 +305,8 @@ contract PallasVerificationReceiever is OAppRead {
                 targetEid: READ_FROM_ENDPOINT_ID,
                 isBlockNum: false,
                 blockNumOrTimestamp: uint64(block.timestamp),
-                confirmations: CHAIN_CONFIG_VM.confirmations,
-                to: CHAIN_CONFIG_VM.toReadFrom,
+                confirmations: CHAIN_CONFIG_VF.confirmations,
+                to: CHAIN_CONFIG_VF.toReadFrom,
                 callData: abi.encodeWithSelector(ICORE_FieldsVerification.getVFStateBytesCompressed.selector, id)
             });
         }
@@ -333,10 +338,30 @@ contract PallasVerificationReceiever is OAppRead {
         bytes calldata _extraData
     ) internal virtual override {
         if (_origin.srcEid > READ_CHANNEL_EID_THRESHOLD) {
-            _readLzReceive(_origin, _guid, _message, _executor, _extraData);
+            bytes memory decoded = abi.decode(_message, (bytes));
+            this._calldataReadLzReceive(_origin, _guid, decoded, _executor, _extraData);
         } else {
             emit ArbitraryMessageReceived(_origin, _message);
         }
+    }
+
+    /// @notice A helper function to convert memory data to calldata for _readLzReceive.
+    /// @dev This function can only be called by the contract itself through this._calldataReadLzReceive().
+    ///      It's used as a bridge to convert memory parameters to calldata when needed.
+    /// @param _origin The origin information containing the source Endpoint ID.
+    /// @param _guid The unique identifier for the received message.
+    /// @param _message The encoded message data that needs to be processed.
+    /// @param _executor The executor address for the message.
+    /// @param _extraData Additional data passed with the message.
+    function _calldataReadLzReceive(
+        Origin calldata _origin,
+        bytes32 _guid,
+        bytes calldata _message,
+        address _executor,
+        bytes calldata _extraData
+    ) external {
+        require(msg.sender == address(this), "Reserved for self.");
+        _readLzReceive(_origin, _guid, _message, _executor, _extraData);
     }
 
     /// @notice Internal function to handle lzRead responses.
@@ -357,9 +382,11 @@ contract PallasVerificationReceiever is OAppRead {
         if (verifyType == TYPE.VERIFY_FIELDS) {
             (uint256 id, VerifyFieldsStateCompressed memory state) = _unpackVerifyFieldsState(_message);
             vfIdToData[id] = state;
+            emit ReadReceived(_origin, _message);
         } else if (verifyType == TYPE.VERIFY_MESSAGE) {
             (uint256 id, VerifyMessageStateCompressed memory state) = _unpackVerifyMessageState(_message);
             vmIdToData[id] = state;
+            emit ReadReceived(_origin, _message);
         } else {
             emit ArbitraryMessageReceived(_origin, _message);
         }
@@ -459,8 +486,8 @@ contract PallasVerificationReceiever is OAppRead {
         CHAIN_CONFIG_VM = ChainConfig({ confirmations: BLOCK_CONFIRMATIONS, toReadFrom: CHAIN_CONFIG_VM.toReadFrom });
     }
 
-    function updateReadChannelIds(uint32[2] memory ids) external onlyOwner {
-        READ_CHANNEL_IDS = ids;
+    function updateReadChannelId(uint32 id) external onlyOwner {
+        READ_CHANNEL_ID = id;
     }
 
     function updateReadFromEndpointId(uint32 id) external onlyOwner {
@@ -509,5 +536,24 @@ contract PallasVerificationReceiever is OAppRead {
         OPTIMISTIC_CONFIG.gasLimit = gasLimit;
         OPTIMISTIC_CONFIG.messageSize = messageSizeBytes;
         OPTIMISTIC_CONFIG.fieldsSize = fieldsSizeBytes;
+    }
+
+    fallback() external payable {
+        revert();
+    }
+
+    receive() external payable {}
+
+    function withdraw() external onlyOwner returns (bool) {
+        (bool sent, ) = owner().call{ value: address(this).balance }("");
+        return sent;
+    }
+
+    function withdrawToken(address tokenAddress) public {
+        IERC20 token = IERC20(tokenAddress);
+        uint256 balance = token.balanceOf(address(this));
+        require(balance > 0, "No tokens to withdraw");
+
+        token.transfer(owner(), balance);
     }
 }
