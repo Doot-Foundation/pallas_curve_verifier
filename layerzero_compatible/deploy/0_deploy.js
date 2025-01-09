@@ -1,21 +1,21 @@
-module.exports = async ({ getNamedAccounts, deployments, ethers }) => {
+module.exports = async ({ getNamedAccounts, deployments }) => {
     const { deploy } = deployments;
     const { deployer } = await getNamedAccounts();
 
-    /// TESTING FOR ARB SEPOLIA
+    /// ETHEREUM SEPOLIA TEST
     const receiverContract = await deploy('PallasVerificationReceiever', {
         from: deployer,
         args: [
-            '0x6EDCE65403992e310A62460808c4b910D972f10f',
+            '0x1a44076050125825900e736c501f859c50fE728c', // ETH MAINNET ENDPOINT ADDRESS
             deployer,
-            '0x2c393870Ed13b8DF0ed2861fBdC109cc2B9bd35F',
-            '0x5790918c7db60C9c57dc1031FAf5f672EB22b4fC',
+            '0x643aDFd52cB8c0cb4c3850BF97468b0EFBE71b25', // ARB MAINNET VF
+            '0xB352B0dE8AF1e27a0fc927c1aD38BdB1bc4FCf40', // ARB MAINNET VM
         ],
         log: true,
         waitConfirmations: 5,
         verify: {
             etherscan: {
-                apiKey: process.env.ARBISCAN_API_KEY,
+                apiKey: process.env.ETHERSCAN_API_KEY,
             },
         },
     });

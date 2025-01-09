@@ -12,8 +12,12 @@ import '@layerzerolabs/toolbox-hardhat'
 import { HardhatUserConfig, HttpNetworkAccountsUserConfig } from 'hardhat/types'
 
 const ARBITRUM_SEPOLIA_RPC = process.env.ARB_SEPOLIA_RPC
-const ARBIITRUM_RPC = process.env.ARB_RPC
+const ARBITRUM_RPC = process.env.ARB_RPC
 const ARBISCAN_API_KEY = process.env.ARBISCAN_API_KEY
+
+const ETHEREUM_SEPOLIA_RPC = process.env.ETH_SEPOLIA_RPC
+const ETHEREUM_RPC = process.env.ETH_RPC
+const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY
 // Set your preferred authentication method
 //
 // If you prefer using a mnemonic, set a MNEMONIC environment variable
@@ -72,11 +76,31 @@ const config: HardhatUserConfig = {
         },
         arbitrum: {
             chainId: 42161,
-            url: ARBIITRUM_RPC ? ARBIITRUM_RPC : 'https://arb1.arbitrum.io/rpc',
+            url: ARBITRUM_RPC ? ARBITRUM_RPC : 'https://arb1.arbitrum.io/rpc',
             accounts: [PRIVATE_KEY ? PRIVATE_KEY : ''],
             verify: {
                 etherscan: {
                     apiKey: ARBISCAN_API_KEY,
+                },
+            },
+        },
+        ethereum_sepolia: {
+            chainId: 11155111,
+            url: ETHEREUM_SEPOLIA_RPC ? ETHEREUM_SEPOLIA_RPC : 'wss://ethereum-sepolia-rpc.publicnode.com',
+            accounts: [PRIVATE_KEY ? PRIVATE_KEY : ''],
+            verify: {
+                etherscan: {
+                    apiKey: ETHERSCAN_API_KEY,
+                },
+            },
+        },
+        ethereum: {
+            chainId: 1,
+            url: ETHEREUM_RPC ? ETHEREUM_RPC : 'wss://ethereum-rpc.publicnode.com',
+            accounts: [PRIVATE_KEY ? PRIVATE_KEY : ''],
+            verify: {
+                etherscan: {
+                    apiKey: ETHERSCAN_API_KEY,
                 },
             },
         },
@@ -88,6 +112,8 @@ const config: HardhatUserConfig = {
         apiKey: {
             arbitrum_sepolia: ARBISCAN_API_KEY ? ARBISCAN_API_KEY : '',
             arbitrum: ARBISCAN_API_KEY ? ARBISCAN_API_KEY : '',
+            ethereum_sepolia: ETHERSCAN_API_KEY ? ETHERSCAN_API_KEY : '',
+            ethereum: ETHERSCAN_API_KEY ? ETHERSCAN_API_KEY : '',
         },
         customChains: [
             {
@@ -106,11 +132,27 @@ const config: HardhatUserConfig = {
                     browserURL: 'https://arbiscan.io/',
                 },
             },
+            {
+                network: 'ethereum_sepolia',
+                chainId: 11155111,
+                urls: {
+                    apiURL: 'https://api-sepolia.etherscan.io/api',
+                    browserURL: 'https://sepolia.etherscan.io/',
+                },
+            },
+            {
+                network: 'ethereum',
+                chainId: 1,
+                urls: {
+                    apiURL: 'https://api.etherscan.io/api',
+                    browserURL: 'https://etherscan.io/',
+                },
+            },
         ],
     },
     namedAccounts: {
         deployer: {
-            default: 0, // wallet address of index[0], of the mnemonic in .env
+            default: 0,
         },
     },
     sourcify: {

@@ -12,14 +12,14 @@ async function main() {
   );
 
   const verifier = Verifier.attach(
-    "0x5790918c7db60C9c57dc1031FAf5f672EB22b4fC"
+    "0xB352B0dE8AF1e27a0fc927c1aD38BdB1bc4FCf40"
   );
 
   const vmId = await verifier.vmCounter();
   console.log("Current ID :", vmId);
 
   const message =
-    "OHQBntWLxiMLLeRBIhBcEEvuzy6kEhhXaOVfN7TNvVUgupXZqeeoysxlrQ8zsn0KJ1sOcDQnUNYiZ2bsJgAVFaj3s4mp2O0R1232";
+    "Sign this message to verify you have access to this wallet. This won't cost any mina!!";
   console.log(message.length);
   const signedMessage = client.signMessage(message, keypair.privateKey);
   const s = BigInt(signedMessage.signature.scalar);

@@ -2,9 +2,9 @@ const { ethers } = require('hardhat');
 
 async function main() {
     const Receiver = await ethers.getContractFactory('PallasVerificationReceiever');
-    const receiver = Receiver.attach('0x68123E0627eA88cD114e92469303e1ABD4E35E9D');
+    const receiver = Receiver.attach('0x5d7A7c08Fa8f2eD91A440dB4989327b79CB12B28');
 
-    const valueF = await receiver.getVFIdToData(9);
+    const valueF = await receiver.getVFIdToData(2);
     console.log(valueF);
 }
 
