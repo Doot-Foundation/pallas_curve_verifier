@@ -30,6 +30,8 @@ ARB SEPOLIA - PallasMessageSignatureVerifier deployed to: https://sepolia.arbisc
 
 ---
 
+Both of these points to the PallasFieldsSignatureVerifier/PallasMessageSignatureVerifier deployed on Arbitrum Sepolia.
+
 ARB SEPOLIA - PallasVerificationReceiever deployed to: https://sepolia.arbiscan.io/address/0x68123E0627eA88cD114e92469303e1ABD4E35E9D ✅(Successful Reads)
 
 ETH SEPOLIA - PallasVerificationReceiever deployed to: https://sepolia.etherscan.io/address/0xfccB27f368F721DFA4aEAbba8b95Be50142bdAa9 ✅(Successful Reads)
@@ -43,6 +45,8 @@ PallasFieldsSignatureVerifier deployed to: https://arbiscan.io/address/0x643aDFd
 PallasMessageSignatureVerifier deployed to: https://arbiscan.io/address/0xB352B0dE8AF1e27a0fc927c1aD38BdB1bc4FCf40
 
 ### ETHEREUM - DATA REPLICATION LAYER
+
+Points to the PallasFieldsSignatureVerifier/PallasMessageSignatureVerifier deployed on Arbitrum Mainnet.
 
 PallasVerificationReceiever deployed to: https://etherscan.io/address/0x5d7A7c08Fa8f2eD91A440dB4989327b79CB12B28
 ✅(Successful Reads)
