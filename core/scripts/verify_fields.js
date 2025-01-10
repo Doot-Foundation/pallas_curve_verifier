@@ -18,18 +18,7 @@ async function main() {
   let vfId = await verifier.vfCounter();
   console.log("Current ID :", vfId);
 
-  const fields = [
-    984932845237n,
-    11299549834589n,
-    65879389797321n,
-    999345723232347n,
-    9956483456821234n,
-    12321343243427n,
-    984932845237n,
-    11299549834589n,
-    65879389797321n,
-    999345723232347n,
-  ];
+  const fields = [984932845237n, 11299549834589n, 85732n, 23n, 3455n];
   console.log(fields.length);
 
   const signedFields = client.signFields(fields, keypair.privateKey);
@@ -50,7 +39,7 @@ async function main() {
     { x: signerFull.x.toString(), y: signerFull.y.toString() },
     { r: r, s: s },
     signedFields.data,
-    false
+    false // testnet/mainnet doesn't matter for fields.
   );
   console.log("Assignment Transaction hash:", txn.hash);
   await txn.wait();

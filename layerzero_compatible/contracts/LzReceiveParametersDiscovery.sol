@@ -2,6 +2,8 @@
 
 pragma solidity ^0.8.0;
 
+import "hardhat/console.sol";
+
 /// @title Point Structure
 /// @notice Represents a point on an elliptic curve with x and y coordinates
 /// @dev Used for public key and signature operations
@@ -95,12 +97,17 @@ contract LzReceiveParametersDiscovery {
     mapping(uint256 => VerifyFieldsStateCompressed) public vfIdToData;
     mapping(uint256 => VerifyMessageStateCompressed) public vmIdToData;
 
-    function geVF(uint256 id) external view returns (VerifyFieldsStateCompressed memory) {
+    function getVF(uint256 id) external view returns (VerifyFieldsStateCompressed memory) {
         return vfIdToData[id];
     }
 
     function getVM(uint256 id) external view returns (VerifyMessageStateCompressed memory) {
         return vmIdToData[id];
+    }
+
+    function getDecoded(bytes calldata _message) external pure returns (bytes memory) {
+        bytes memory decoded = abi.decode(_message, (bytes));
+        return decoded;
     }
 
     /// Prepare step - Original packed data received through CORE_FieldsVerification/CORE_MessageVerification
@@ -114,7 +121,7 @@ contract LzReceiveParametersDiscovery {
     }
 
     function _lzReceive(bytes calldata _message) internal {
-        bytes memory decoded = abi.decode(_message, (bytes)); /// Need to deconstruct the original bytes.
+        bytes memory decoded = abi.decode(_message, (bytes));
         this._calldataReadLzReceive(decoded);
     }
 

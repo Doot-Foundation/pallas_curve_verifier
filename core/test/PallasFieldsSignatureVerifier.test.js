@@ -54,8 +54,6 @@ describe("PallasFieldsSignatureVerifier", function () {
         998899999999999999999999999999999999999999999999999999n,
       ];
 
-      console.log("ORIGINAL DATA LENGTH :", fields.length);
-
       const signedFields = client.signFields(fields, keypair.privateKey);
 
       const altFields = [
@@ -175,10 +173,8 @@ describe("PallasFieldsSignatureVerifier", function () {
 
       const finalObject = await verifier.getVFState(vfId);
       const bytesObject = await verifier.getVFStateBytesCompressed(vfId);
-      console.log("Bytes Length : ", bytesObject.length);
       const decodedsol_gas =
         await verifier.decodeVFStateBytesCompressed.estimateGas(bytesObject);
-      console.log("Decoding gas : ", decodedsol_gas);
 
       const decodedsol = await verifier.decodeVFStateBytesCompressed(
         bytesObject

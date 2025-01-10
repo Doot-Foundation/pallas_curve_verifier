@@ -19,7 +19,7 @@ async function main() {
   console.log("Current ID :", vmId);
 
   const message =
-    "Sign this message to verify you have access to this wallet. This won't cost any mina!!";
+    "Sign this message to verify you have access to this wallet!!";
   console.log(message.length);
   const signedMessage = client.signMessage(message, keypair.privateKey);
   const s = BigInt(signedMessage.signature.scalar);

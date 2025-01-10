@@ -32,8 +32,6 @@ describe("PallasMessageSignatureVerifier", function () {
       const message =
         "OHQBntWLxiMLLeRBIhBcEEvuzy6kEhhXaOVfN7TNvVUgupXZqeeoysxlrQ8zsn0KJ1sOcDQnUNYiZ2bsJgAVFaj3s4mp2O0R1232";
 
-      console.log("ORIGINAL DATA LENGTH :", message.length);
-
       // Get signed message
       const signedMessage = client.signMessage(message, keypair.privateKey);
 
@@ -105,10 +103,8 @@ describe("PallasMessageSignatureVerifier", function () {
 
       const finalObject = await verifier.getVMState(vmId);
       const bytesObject = await verifier.getVMStateBytesCompressed(vmId);
-      console.log("Bytes Length : ", bytesObject.length);
       const decodedsol_gas =
         await verifier.decodeVMStateBytesCompressed.estimateGas(bytesObject);
-      console.log("Decoding gas : ", decodedsol_gas);
 
       const decodedsol = await verifier.decodeVMStateBytesCompressed(
         bytesObject
